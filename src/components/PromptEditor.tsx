@@ -363,7 +363,7 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
         content,
         title: title.trim() || 'Untitled',
         is_template: isTemplate,
-        rating: rating ?? 0,
+        rating: Number(rating) || 0,
         tags: [],
         negative_prompt: negativePrompt.trim() || undefined
       });
