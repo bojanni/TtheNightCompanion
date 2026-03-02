@@ -13,6 +13,9 @@ const { handlePgError } = require('./lib/pg-error-handler');
 const app = express();
 const port = process.env.PORT || 3000;
 
+let dbReady = false;
+let dbInitError = null;
+
 app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
   credentials: true
@@ -152,7 +155,7 @@ app.use('/api/videos', express.static(path.join(__dirname, '../uploads/videos'))
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
+  res.json({ status: 'ok', timestamp: new Date(), dbReady, dbInitError: dbInitError ? dbInitError.message : null });
 });
 
 // Test DB connection
@@ -170,8 +173,16 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-// Initialize DB and start server
+// Error handling middleware should be the last app.use()
+app.use(errorMiddleware);
+
+app.listen(port, () => {
+  logger.info(`✅ Server running on http://localhost:${port}`);
+});
+
+// Initialize DB and start background tasks
 initSchema().then(async () => {
+  dbReady = true;
   logger.info('✅ Database check complete.');
   
   // Auto-import NC models if CSV exists
@@ -180,14 +191,7 @@ initSchema().then(async () => {
   } catch (err) {
     logger.warn('⚠️  NC models import failed (non-fatal):', err.message);
   }
-  
-  // Error handling middleware should be the last app.use()
-  app.use(errorMiddleware);
-  
-  app.listen(port, () => {
-    logger.info(`✅ Server running on http://localhost:${port}`);
-  });
 }).catch(err => {
+  dbInitError = err;
   logger.error('❌ Failed to initialize database:', err);
-  process.exit(1);
 });

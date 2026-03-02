@@ -171,17 +171,23 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {recentGallery.length > 0 && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <ImageIcon size={18} className="text-amber-400" />
-                  {t('dashboard.recentGallery')}
-                </h2>
-                <Link to="/gallery" className="text-sm text-amber-400 hover:text-amber-300 transition-colors">
-                  {t('common.viewAll')}
-                </Link>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <ImageIcon size={18} className="text-amber-400" />
+                {t('dashboard.recentGallery')}
+              </h2>
+              <Link to="/gallery" className="text-sm text-amber-400 hover:text-amber-300 transition-colors">
+                {t('common.viewAll')}
+              </Link>
+            </div>
+
+            {recentGallery.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <ImageIcon size={32} className="mx-auto mb-2 opacity-50" />
+                <p>{t('dashboard.noGallery')}</p>
               </div>
+            ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                 {recentGallery.map((item) => (
                   <Link
@@ -204,8 +210,8 @@ export default function Dashboard() {
                   </Link>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
     </div>

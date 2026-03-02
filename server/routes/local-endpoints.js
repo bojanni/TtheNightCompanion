@@ -95,19 +95,26 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete local endpoint (support both ID parameter and query provider)
-router.delete('/:id?', async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        await pool.query('DELETE FROM user_local_endpoints WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        logger.error('Error deleting local endpoint:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/', async (req, res) => {
+    try {
         const { provider } = req.query;
 
-        if (id) {
-            await pool.query('DELETE FROM user_local_endpoints WHERE id = $1', [id]);
-        } else if (provider) {
-            await pool.query('DELETE FROM user_local_endpoints WHERE provider = $1', [provider]);
-        } else {
-            return res.status(400).json({ error: 'Missing id or provider' });
+        if (!provider) {
+            return res.status(400).json({ error: 'Missing provider' });
         }
 
+        await pool.query('DELETE FROM user_local_endpoints WHERE provider = $1', [provider]);
         res.json({ success: true });
     } catch (err) {
         logger.error('Error deleting local endpoint:', err);

@@ -158,6 +158,18 @@ async function initSchema() {
             );
         `);
 
+        // Compatibility: newer UI uses { detail, works_well } instead of { key, value }
+        await addColumn(pool, 'character_details', 'detail', 'TEXT');
+        await addColumn(pool, 'character_details', 'works_well', 'BOOLEAN DEFAULT FALSE');
+
+        // Make legacy "key" optional so inserts that only provide detail/works_well don't fail
+        try {
+            await pool.query(`ALTER TABLE character_details ALTER COLUMN key DROP NOT NULL`);
+            await pool.query(`ALTER TABLE character_details ALTER COLUMN key SET DEFAULT 'detail'`);
+        } catch (e) {
+            console.log(`Note: Could not relax character_details.key constraint: ${e.message}`);
+        }
+
         // Gallery Items
         await pool.query(`
             CREATE TABLE IF NOT EXISTS gallery_items (
