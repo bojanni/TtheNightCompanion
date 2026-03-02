@@ -3,7 +3,7 @@ export interface AIProviderModel {
     name: string;         // display name e.g. "GPT-4o"
     provider: string;     // "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "lmstudio"
     providerLabel?: string; // display name for the provider badge, e.g. "OpenAI"
-    capabilities: ('text' | 'vision' | 'reasoning')[];
+    capabilities: ('text' | 'vision' | 'reasoning' | 'web_search' | 'code' | 'audio' | 'video')[];
     strengths: {
         creativity: number;    // 1-5
         instruction: number;   // 1-5

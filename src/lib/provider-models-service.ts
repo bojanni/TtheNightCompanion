@@ -47,7 +47,7 @@ export async function refreshProvider(provider: string): Promise<NormalizedModel
 
 export function filterByCapability(
     models: NormalizedModel[],
-    cap: 'vision' | 'reasoning' | 'web_search' | 'code' | 'text'
+    cap: 'vision' | 'reasoning' | 'web_search' | 'code' | 'audio' | 'video' | 'text'
 ): NormalizedModel[] {
     return models.filter(m => m.capabilities.includes(cap));
 }

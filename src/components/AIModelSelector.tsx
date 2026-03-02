@@ -35,6 +35,39 @@ const BADGE_COLORS: Record<string, string> = {
     Local: 'bg-slate-600/30   text-slate-300   border-slate-600/30',
 };
 
+const CAPABILITY_BADGES: Record<string, { label: string; icon: string; color: string; title: string }> = {
+    text: { label: 'Text', icon: '📝', color: 'bg-gray-100 text-gray-700', title: 'Dit model ondersteunt tekst-input en tekst-output' },
+    vision: { label: 'Vision', icon: '👁️', color: 'bg-blue-100 text-blue-700', title: 'Dit model ondersteunt afbeeldingen als input' },
+    reasoning: { label: 'Reasoning', icon: '🧠', color: 'bg-purple-100 text-purple-700', title: 'Dit model ondersteunt (expliciete) reasoning' },
+    web_search: { label: 'Web Search', icon: '🔍', color: 'bg-green-100 text-green-700', title: 'Dit model kan online/web search gebruiken' },
+    code: { label: 'Code', icon: '💻', color: 'bg-yellow-100 text-yellow-700', title: 'Dit model is geoptimaliseerd voor code' },
+    audio: { label: 'Audio', icon: '🎙️', color: 'bg-orange-100 text-orange-700', title: 'Dit model ondersteunt audio als input of output' },
+    video: { label: 'Video', icon: '🎬', color: 'bg-red-100 text-red-700', title: 'Dit model ondersteunt video als input of output' },
+};
+
+function CapabilityBadges({ capabilities }: { capabilities: string[] | undefined | null }) {
+    if (!capabilities || capabilities.length === 0) return null;
+    const unique = Array.from(new Set(capabilities));
+    return (
+        <div className="flex items-center gap-1 flex-wrap">
+            {unique.map((c) => {
+                const meta = CAPABILITY_BADGES[c];
+                if (!meta) return null;
+                return (
+                    <span
+                        key={c}
+                        title={meta.title}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${meta.color}`}
+                    >
+                        <span className="text-[10px] leading-none">{meta.icon}</span>
+                        {meta.label}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 // Provider colour dots
 const PROVIDER_DOTS: Record<string, string> = {
     openai: 'bg-emerald-400',
@@ -123,6 +156,8 @@ function ModelRow({
                     {model.recommendedFor.map(t => <TaskPill key={t} task={t} />)}
                 </div>
 
+                <CapabilityBadges capabilities={model.capabilities} />
+
                 {model.description && (
                     <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{model.description}</p>
                 )}
@@ -209,7 +244,11 @@ function LiveModelRow({
                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
                     <span className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-200'}`}>{model.name}</span>
                     {isSelected && <CheckCircle2 size={13} className="text-teal-400 flex-none" />}
-                    {!model.isAvailable && <AlertTriangle size={12} className="text-amber-400" title="No API key configured" />}
+                    {!model.isAvailable && (
+                        <span title="No API key configured" className="flex-none">
+                            <AlertTriangle size={12} className="text-amber-400" />
+                        </span>
+                    )}
                     {badge && (
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${BADGE_COLORS[badge]}`}>{badge}</span>
                     )}
@@ -221,6 +260,8 @@ function LiveModelRow({
                     {task === 'vision' && hasVision && !recommendedFor.includes('vision') && <TaskPill task="vision" />}
                     {task === 'research' && model.capabilities.includes('web_search') && !recommendedFor.includes('research') && <TaskPill task="research" />}
                 </div>
+
+                <CapabilityBadges capabilities={model.capabilities} />
 
                 {description && (
                     <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{description}</p>
@@ -256,6 +297,7 @@ export default function AIModelSelector({
     onRefreshProvider,
 }: AIModelSelectorProps) {
     const [search, setSearch] = useState('');
+    const [capFilter, setCapFilter] = useState<'all' | 'vision' | 'reasoning' | 'audio' | 'video' | 'web_search' | 'code'>('all');
 
     const hasLive = liveModels && Object.keys(liveModels).length > 0;
 
@@ -276,6 +318,10 @@ export default function AIModelSelector({
                 m.recommendedFor.some(t => t.includes(q))
             );
         }
+
+        if (capFilter !== 'all') {
+            all = all.filter(m => m.capabilities.includes(capFilter));
+        }
         all.sort((a, b) => {
             const aRec = a.recommendedFor.includes(task);
             const bRec = b.recommendedFor.includes(task);
@@ -287,7 +333,7 @@ export default function AIModelSelector({
             cloudModels: all.filter(m => !['ollama', 'lmstudio'].includes(m.provider)),
             localModels: all.filter(m => ['ollama', 'lmstudio'].includes(m.provider)),
         };
-    }, [search, task, availableProviders, onlyAvailable, hasLive]);
+    }, [search, task, availableProviders, onlyAvailable, hasLive, capFilter]);
 
     // ── Live models (grouped) ─────────────────────────────────────────────────
     const liveGroups = useMemo(() => {
@@ -300,6 +346,10 @@ export default function AIModelSelector({
                 ? models.filter(m => m.capabilities.includes('vision'))
                 : models;
 
+            if (capFilter !== 'all') {
+                filtered = filtered.filter(m => m.capabilities.includes(capFilter));
+            }
+
             if (q) {
                 filtered = filtered.filter(m =>
                     m.name.toLowerCase().includes(q) ||
@@ -311,7 +361,7 @@ export default function AIModelSelector({
             if (filtered.length > 0) groups[provider] = filtered;
         }
         return groups;
-    }, [liveModels, search, task, hasLive]);
+    }, [liveModels, search, task, hasLive, capFilter]);
 
     const currentModel = getModelById(value);
     const totalLive = Object.values(liveGroups).reduce((s, ms) => s + ms.length, 0);
@@ -388,6 +438,34 @@ export default function AIModelSelector({
                             <RefreshCw size={13} className={liveLoading ? 'animate-spin' : ''} />
                         </button>
                     )}
+                </div>
+
+                {/* Capability filter pills */}
+                <div className="px-3 py-2 border-b border-slate-800/60 bg-slate-900/40 flex items-center gap-2 flex-wrap">
+                    {(
+                        [
+                            { id: 'all' as const, label: 'All' },
+                            { id: 'vision' as const, label: 'Vision' },
+                            { id: 'reasoning' as const, label: 'Reasoning' },
+                            { id: 'audio' as const, label: 'Audio' },
+                            { id: 'video' as const, label: 'Video' },
+                            { id: 'web_search' as const, label: 'Web Search' },
+                            { id: 'code' as const, label: 'Code' },
+                        ]
+                    ).map((p) => (
+                        <button
+                            key={p.id}
+                            onClick={() => setCapFilter(p.id)}
+                            className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-colors
+                                ${capFilter === p.id
+                                    ? 'bg-teal-500/15 text-teal-300 border-teal-500/30'
+                                    : 'bg-slate-800/40 text-slate-400 border-slate-700/40 hover:text-slate-200 hover:border-slate-600/60'
+                                }`}
+                            title={p.id === 'all' ? 'Toon alle modellen' : `Filter op capability: ${p.label}`}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Live status bar */}
