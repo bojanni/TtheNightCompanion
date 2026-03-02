@@ -24,14 +24,14 @@ interface SmartModelRecommenderProps {
     defaultExpanded?: boolean;
 }
 
-type HybridResult = {
+interface HybridResult {
     model: ModelInfo;
     score: number;
     reasons: string[];
     tips?: string[];
     recommendedPreset?: string;
     isAiRefined: boolean;
-};
+}
 
 function RatingDots({ value, max = 5, color }: { value: number; max?: number; color: string }) {
     return (

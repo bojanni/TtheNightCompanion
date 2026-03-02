@@ -27,7 +27,7 @@ import { useExtension } from '../context/ExtensionContext';
 
 const PAGE_SIZE = 20;
 
-type GalleryItemData = { id: string; image_url: string; title: string; rating: number; model?: string };
+interface GalleryItemData { id: string; image_url: string; title: string; rating: number; model?: string }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ImageCarousel({ images, onUnlink, onImageClick, t }: { images: GalleryItemData[], onUnlink: (imgId: string) => void, onImageClick: (img: GalleryItemData) => void, t: any }) {

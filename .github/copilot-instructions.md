@@ -161,3 +161,9 @@ The system automatically extracts:
 2. Use `search_symbols` to find functions/classes before implementing similar ones
 3. Use `get_file_symbols` to understand a file's structure before editing
 4. Knowledge stored while editing a file automatically links to that file context
+
+---
+
+## Coding Preferences
+
+- **Prefer interfaces over type aliases for object shapes** (TypeScript): Use `interface` instead of `type` when defining the shape of an object.
