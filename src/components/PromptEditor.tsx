@@ -10,7 +10,7 @@ import { PromptSchema } from '../lib/validation-schemas';
 import { generateTitle, suggestTags, triggerKeywordExtraction } from '../lib/ai-service';
 import { handleAIError } from '../lib/error-handler';
 import { MODELS, analyzePrompt } from '../lib/models-data';
-// import { useNCModels } from '../hooks/useNCModels'; // Commented out as it's not used
+import { useNCModels } from '../hooks/useNCModels';
 import ModelSelector from './ModelSelector';
 import StarRating from './StarRating';
 import TagBadge from './TagBadge';
@@ -37,6 +37,8 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
   const [isTemplate, setIsTemplate] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const ncModelsQuery = useNCModels();
 
   // Form validation state
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -75,21 +77,23 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
   const [managingCollectionFor, setManagingCollectionFor] = useState<string | null>(null); // gallery_item_id
 
   // Models State - Derived from static data
-  const availableModels = useMemo(() => MODELS.map(m => ({
+  const modelsForDropdown = ncModelsQuery.data ?? MODELS;
+
+  const availableModels = useMemo(() => modelsForDropdown.map(m => ({
     id: m.id,
     name: m.name,
     provider: m.provider,
     description: m.description
-  })), []);
+  })), [modelsForDropdown]);
 
   const availableProviders = useMemo(() => {
-    const uniqueProviders = Array.from(new Set(MODELS.map(m => m.provider)));
+    const uniqueProviders = Array.from(new Set(modelsForDropdown.map(m => m.provider)));
     return uniqueProviders.map(p => ({
       id: p,
       name: p,
       type: 'cloud' as const
     }));
-  }, []);
+  }, [modelsForDropdown]);
 
   const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 

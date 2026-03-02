@@ -11,7 +11,6 @@ import { db } from '../lib/api';
 import type { GalleryItem, Prompt } from '../lib/types';
 import Modal from '../components/Modal';
 import ChoiceModal from '../components/ChoiceModal';
-import { GallerySkeleton } from '../components/GallerySkeleton';
 import StarRating from '../components/StarRating';
 import PromptSelector from '../components/PromptSelector';
 import ModelSelector from '../components/ModelSelector';
@@ -19,7 +18,7 @@ import { generateFromDescription } from '../lib/ai-service';
 import { toast } from 'sonner';
 import GridDensitySelector from '../components/GridDensitySelector';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ALL_MODELS } from '../lib/provider-models';
+import { useNCModels } from '../hooks/useNCModels';
 import { useGalleryState } from '../hooks/useGalleryState';
 import MediaRenderer from '../components/MediaRenderer';
 import GalleryLightbox from '../components/GalleryLightbox';
@@ -58,6 +57,7 @@ const PAGE_SIZE = 24;
 
 export default function Gallery() {
   const { t } = useTranslation();
+  const ncModelsQuery = useNCModels();
   const {
     items, setItems,
     collections,
@@ -156,14 +156,22 @@ export default function Gallery() {
     openItemEditor(null);
   });
 
-  const allModels = ALL_MODELS;
-  const allProviders = [
-    { id: 'openai', name: 'OpenAI', type: 'cloud' as const },
-    { id: 'gemini', name: 'Google Gemini', type: 'cloud' as const },
-    { id: 'anthropic', name: 'Anthropic Claude', type: 'cloud' as const },
-    { id: 'openrouter', name: 'OpenRouter', type: 'cloud' as const },
-    { id: 'together', name: 'Together AI', type: 'cloud' as const },
-  ];
+  const allModels = useMemo(() => {
+    const models = ncModelsQuery.data ?? [];
+    return models.map(m => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider,
+      description: m.description,
+    }));
+  }, [ncModelsQuery.data]);
+
+  const allProviders = useMemo(() => {
+    const providers = new Set((ncModelsQuery.data ?? []).map(m => m.provider));
+    // Fallback so the dropdown renders even before first fetch
+    if (providers.size === 0) providers.add('NightCafe');
+    return Array.from(providers).map(p => ({ id: p, name: p, type: 'cloud' as const }));
+  }, [ncModelsQuery.data]);
 
   useEffect(() => {
     // Debounce search
@@ -365,15 +373,16 @@ export default function Gallery() {
 
     setGeneratingTitle(true);
     try {
-      const title = await generateFromDescription(
+      const result = await generateFromDescription(
         `Create a short, descriptive title (maximum 10 words) for this image prompt: "${promptContent}"`,
         {
           preferences: { maxWords: 10 }
         },
         ''
       );
-      const cleanTitle = title.trim().replace(/\*\*/g, '').replace(/"/g, '');
-      setFormTitle(cleanTitle);
+      const rawTitle = (result?.prompt ?? '').trim();
+      const cleanTitle = rawTitle.replace(/\*\*/g, '').replace(/"/g, '');
+      if (cleanTitle) setFormTitle(cleanTitle);
     } catch (err) {
       console.error('Failed to generate title:', err);
       const fallbackTitle = promptContent.split(' ').slice(0, 10).join(' ');

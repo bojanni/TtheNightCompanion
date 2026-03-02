@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { db } from '../lib/api';
 import { MODELS, CATEGORY_OPTIONS, type ModelInfo } from '../lib/models-data';
+import { useNCModels } from '../hooks/useNCModels';
 import type { GalleryItem } from '../lib/types';
 import StarRating from './StarRating';
 
@@ -30,6 +31,7 @@ interface ModelStats {
 }
 
 export default function ModelTracker() {
+  const ncModelsQuery = useNCModels();
   const [entries, setEntries] = useState<UsageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -41,6 +43,25 @@ export default function ModelTracker() {
   const [formRating, setFormRating] = useState(0);
   const [formKeeper, setFormKeeper] = useState(false);
   const [formNotes, setFormNotes] = useState('');
+
+  const modelsForDropdown = ncModelsQuery.data ?? MODELS;
+
+  const findModelId = useCallback((modelNameOrId: string): string => {
+    if (!modelNameOrId) return '';
+    // Check if it's already a valid ID
+    const directMatch = modelsForDropdown.find(m => m.id === modelNameOrId);
+    if (directMatch) return directMatch.id;
+
+    // Check if it's a name
+    const nameMatch = modelsForDropdown.find(m => m.name.toLowerCase() === modelNameOrId.toLowerCase());
+    if (nameMatch) return nameMatch.id;
+
+    // Try partial match on name
+    const partialMatch = modelsForDropdown.find(m => m.name.toLowerCase().includes(modelNameOrId.toLowerCase()));
+    if (partialMatch) return partialMatch.id;
+
+    return '';
+  }, [modelsForDropdown]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -88,28 +109,11 @@ export default function ModelTracker() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [findModelId]);
 
   useEffect(() => {
     loadEntries();
   }, [loadEntries]);
-
-  function findModelId(modelNameOrId: string): string {
-    if (!modelNameOrId) return '';
-    // Check if it's already a valid ID
-    const directMatch = MODELS.find(m => m.id === modelNameOrId);
-    if (directMatch) return directMatch.id;
-
-    // Check if it's a name
-    const nameMatch = MODELS.find(m => m.name.toLowerCase() === modelNameOrId.toLowerCase());
-    if (nameMatch) return nameMatch.id;
-
-    // Try partial match on name
-    const partialMatch = MODELS.find(m => m.name.toLowerCase().includes(modelNameOrId.toLowerCase()));
-    if (partialMatch) return partialMatch.id;
-
-    return '';
-  }
 
   async function handleSave() {
     if (!formModelId) return;
@@ -152,7 +156,7 @@ export default function ModelTracker() {
 
     return Array.from(grouped.entries())
       .map(([modelId, uses]) => {
-        const model = MODELS.find((m) => m.id === modelId);
+        const model = modelsForDropdown.find((m) => m.id === modelId);
         if (!model) return null;
 
         const rated = uses.filter((u) => u.rating > 0);
@@ -179,14 +183,14 @@ export default function ModelTracker() {
       })
       .filter((s): s is ModelStats => s !== null)
       .sort((a, b) => b.avgRating - a.avgRating);
-  }, [entries]);
+  }, [entries, modelsForDropdown]);
 
   const bestModel = stats[0] ?? null;
   const mostUsed = [...stats].sort((a, b) => b.totalUses - a.totalUses)[0] ?? null;
   const bestKeeper = [...stats].sort((a, b) => b.keeperRate - a.keeperRate)[0] ?? null;
 
   function getModelName(id: string): string {
-    return MODELS.find((m) => m.id === id)?.name ?? id;
+    return modelsForDropdown.find((m) => m.id === id)?.name ?? id;
   }
 
   if (loading) {
@@ -265,7 +269,7 @@ export default function ModelTracker() {
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-amber-500/40"
               >
                 <option value="">Select model...</option>
-                {MODELS.map((m) => (
+                {modelsForDropdown.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
