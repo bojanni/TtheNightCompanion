@@ -26,6 +26,8 @@ const VISION_ID_RE = /llava|vision|[\-_]vl[\-_]|pixtral|llama-4|kimi-k2/i;
 function detectCapabilities(id, extra = {}) {
     const caps = ['text'];
     if (extra.vision || VISION_ID_RE.test(id)) caps.push('vision');
+    if (extra.audio) caps.push('audio');
+    if (extra.video) caps.push('video');
     if (extra.reasoning || REASONING_RE.test(id)) caps.push('reasoning');
     if (extra.webSearch || WEB_SEARCH_RE.test(id)) caps.push('web_search');
     if (CODE_RE.test(id)) caps.push('code');
@@ -58,14 +60,26 @@ async function fetchOpenRouter(apiKey) {
     if (!res.ok) throw new Error(`OpenRouter /models → ${res.status}`);
     const { data } = await res.json();
     return (data || []).map(m => {
-        const isVision = m.architecture?.modality === 'multimodal';
-        const isOnline = m.id.endsWith(':online') || m.id.includes('online');
+        const modality = m.architecture?.modality || '';
+        const isVision = modality.includes('image') || m.pricing?.image !== undefined;
+        const isAudio = modality.includes('audio');
+        const isVideo = modality.includes('video');
+
+        const isOnline = m.id.endsWith(':online') || m.id.includes('online') ||
+            (m.supported_parameters || []).includes('online');
+        const hasReasoning = (m.supported_parameters || []).includes('reasoning');
         const costOut = m.pricing?.completion;
         return normalize({
             originalId: m.id,
             provider: 'openrouter',
             name: m.name,
-            capabilities: detectCapabilities(m.id, { vision: isVision, webSearch: isOnline }),
+            capabilities: detectCapabilities(m.id, {
+                vision: isVision,
+                webSearch: isOnline,
+                reasoning: hasReasoning,
+                audio: isAudio,
+                video: isVideo,
+            }),
             contextWindow: m.context_length,
             costTier: m.pricing?.completion === '0' ? 'free' : deriveCostTier(costOut),
             pricing: m.pricing ? {
