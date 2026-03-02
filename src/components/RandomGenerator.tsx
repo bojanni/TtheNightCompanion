@@ -539,7 +539,20 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
 
             <div className="flex flex-col items-center gap-4 mt-auto">
               <div className="flex flex-col items-center gap-2">
+                {autoDiversityEnabled && (
+                  <div className="flex items-center justify-center gap-1.5 mb-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-[10px] text-amber-400 font-medium w-fit">
+                    <Sparkles size={10} /> Auto-Diversity ON
+                  </div>
+                )}
                 <div className="flex justify-center gap-3">
+                  <button
+                    onClick={() => setShowDiversity(!showDiversity)}
+                    className={`p-3 rounded-xl transition-all border flex items-center justify-center ${showDiversity ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'}`}
+                    title="View Diversity Insights"
+                  >
+                    <BarChart2 size={16} />
+                  </button>
+
                   <button
                     onClick={handleGenerate}
                     disabled={saving || regenerating || showClearModal}
@@ -629,7 +642,20 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
 
           <div className="flex flex-col items-center gap-4 mt-auto">
             <div className="flex flex-col items-center gap-2">
+              {autoDiversityEnabled && (
+                <div className="flex items-center justify-center gap-1.5 mb-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-[10px] text-amber-400 font-medium w-fit">
+                  <Sparkles size={10} /> Auto-Diversity ON
+                </div>
+              )}
               <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => setShowDiversity(!showDiversity)}
+                  className={`p-3 rounded-xl transition-all border flex items-center justify-center ${showDiversity ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'}`}
+                  title="View Diversity Insights"
+                >
+                  <BarChart2 size={16} />
+                </button>
+
                 <button
                   onClick={handleGenerate}
                   disabled={saving || regenerating || showClearModal}
@@ -662,6 +688,27 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
               Auto-fill is now managed globally above
             </span>
           </div>
+        </div>
+      )}
+
+      {showDiversity && (
+        <div className="animate-in slide-in-from-top-4 fade-in duration-300">
+          <DiversityInsights 
+            context={diversityContext} 
+            autoDiversityEnabled={autoDiversityEnabled}
+            onToggleAutoDiversity={setAutoDiversityEnabled}
+            onAddGreylist={(kw) => {
+              if (!greylist.includes(kw)) {
+                toast.success(`Keyword '${kw}' is now effectively greylisted via Auto-Diversity.`, {
+                  description: "You can permanently add it to global greylist in Settings."
+                });
+              }
+            }}
+            onSuggestTheme={(tm) => {
+              setPrompt(prev => prev ? `${prev}, ${tm}` : tm);
+              toast.success(`Added '${tm}' to prompt.`);
+            }}
+          />
         </div>
       )}
 
