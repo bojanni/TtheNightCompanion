@@ -10,6 +10,7 @@ import { PromptSchema } from '../lib/validation-schemas';
 import { generateTitle, suggestTags, triggerKeywordExtraction } from '../lib/ai-service';
 import { handleAIError } from '../lib/error-handler';
 import { MODELS, analyzePrompt } from '../lib/models-data';
+import { useNCModels } from '../hooks/useNCModels';
 import ModelSelector from './ModelSelector';
 import StarRating from './StarRating';
 import TagBadge from './TagBadge';
