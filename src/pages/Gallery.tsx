@@ -531,10 +531,10 @@ export default function Gallery() {
             )}
           </p>
         </div>
-        <div className="flex flex-wrap sm:flex-nowrap gap-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,auto))] sm:flex sm:flex-nowrap gap-2">
           <button
             onClick={() => setShowCollectionEditor(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700"
           >
             <FolderOpen size={14} />
             {t('gallery.new_collection')}
@@ -542,7 +542,7 @@ export default function Gallery() {
           <button
             onClick={handleExport}
             disabled={totalCount === 0 || exporting}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 disabled:opacity-50"
           >
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             {t('common.export')}
@@ -550,16 +550,16 @@ export default function Gallery() {
           <button
             onClick={handleStartSlideshow}
             disabled={totalCount === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 disabled:opacity-50"
           >
             <Play size={14} />
             {t('gallery.slideshow')}
           </button>
 
-          <div className="relative">
+          
             <button
               onClick={() => setShowDisplayOptions(!showDisplayOptions)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700"
               title={t('gallery.display_options')}
             >
               <Settings2 size={14} />
@@ -599,19 +599,19 @@ export default function Gallery() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          
 
           <button
             onClick={() => setShowImportModal(true)}
             disabled={importingNightcafe}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500/10 text-indigo-400 text-sm font-medium rounded-xl hover:bg-indigo-500/20 transition-colors border border-indigo-500/20 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-500/10 text-indigo-400 text-sm font-medium rounded-xl hover:bg-indigo-500/20 transition-colors border border-indigo-500/20 disabled:opacity-50"
           >
             {importingNightcafe ? <Loader2 size={14} className="animate-spin" /> : <Plus size={16} />}
             {t('prompts.import.title')}
           </button>
           <button
             onClick={() => openItemEditor(null)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-xl hover:bg-amber-600 transition-colors shadow-lg shadow-amber-500/20"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-xl hover:bg-amber-600 transition-colors shadow-lg shadow-amber-500/20"
           >
             <Plus size={16} />
             {t('gallery.add_item')}

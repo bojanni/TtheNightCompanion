@@ -10,7 +10,7 @@ import { PromptSchema } from '../lib/validation-schemas';
 import { generateTitle, suggestTags, triggerKeywordExtraction } from '../lib/ai-service';
 import { handleAIError } from '../lib/error-handler';
 import { MODELS, analyzePrompt } from '../lib/models-data';
-import { useNCModels } from '../hooks/useNCModels';
+// import { useNCModels } from '../hooks/useNCModels'; // Commented out as it's not used
 import ModelSelector from './ModelSelector';
 import StarRating from './StarRating';
 import TagBadge from './TagBadge';
@@ -253,6 +253,33 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
       toast.error('Failed to update collection');
     }
   }
+
+
+  async function handleDeleteGalleryItem(itemId: string) {
+    if (!confirm('Are you sure you want to delete this image? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      const { error } = await db.from('gallery_items').delete().eq('id', itemId);
+      if (error) throw error;
+      
+      // Update local state to remove the deleted item
+      setGalleryItems(prev => prev.filter(item => item.id !== itemId));
+      
+      // If this was the main image for the prompt, remove the reference
+      if (prompt && prompt.gallery_item_id === itemId) {
+        await db.from('prompts').update({ gallery_item_id: null }).eq('id', prompt.id);
+      }
+      
+      toast.success('Image deleted successfully');
+    } catch (err) {
+      console.error('Failed to delete gallery item:', err);
+      toast.error('Failed to delete image');
+    }
+  }
+
+
 
 
   async function generateTags() {
@@ -502,6 +529,18 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
                 } finally {
                   setIsGeneratingTitle(false);
                 }
+             
+             
+             
+              
+             
+             
+             
+             
+             
+             
+             
+             
               }}
               disabled={isGeneratingTitle || !content.trim()}
               className="text-xs text-amber-500 hover:text-amber-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
@@ -973,6 +1012,13 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
                   className="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg border border-slate-600 w-full flex items-center justify-center gap-1"
                 >
                   <FolderPlus size={10} /> Collection
+                </button>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteGalleryItem(item.id); }}
+                  className="text-[10px] bg-red-700 hover:bg-red-600 text-white px-2 py-1 rounded-lg border border-red-600 w-full flex items-center justify-center gap-1"
+                >
+                  <X size={10} /> Delete
                 </button>
 
                 {item.collection_id && (
