@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Copy, Star, Play, Pause, Maximize, Minimize } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Copy, Star, Play, Pause, Maximize, Minimize, PanelTop, PanelBottom } from 'lucide-react';
 import { formatDate } from '../lib/date-utils';
 import type { GalleryItem } from '../lib/types';
 import { toast } from 'sonner';
@@ -37,11 +37,16 @@ export default function GalleryLightbox({
     const [isPlaying, setIsPlaying] = useState(autoPlay);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [zenMode, setZenMode] = useState(() => localStorage.getItem('slideshowZenMode') === 'true');
+    const [overlayMode, setOverlayMode] = useState(() => localStorage.getItem('galleryOverlayMode') === 'true');
     const [promptExpanded, setPromptExpanded] = useState(false);
 
     useEffect(() => {
         localStorage.setItem('slideshowZenMode', String(zenMode));
     }, [zenMode]);
+
+    useEffect(() => {
+        localStorage.setItem('galleryOverlayMode', String(overlayMode));
+    }, [overlayMode]);
     const [imgError, setImgError] = useState(false);
     const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const touchStartX = useRef<number | null>(null);
@@ -187,10 +192,22 @@ export default function GalleryLightbox({
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
 
+            {/* ── Overlay Mode button ─────────────────────────────────────── */}
+            {!zenMode && (
+                <button
+                    onClick={() => setOverlayMode(!overlayMode)}
+                    className="absolute top-4 right-28 z-20 p-2.5 rounded-full bg-black/30 backdrop-blur-sm hover:bg-black/60 text-white transition-colors"
+                    aria-label={overlayMode ? t('gallery.show_below', { defaultValue: 'Show info below' }) : t('gallery.show_overlay', { defaultValue: 'Show info overlay' })}
+                    title={overlayMode ? t('gallery.show_below', { defaultValue: 'Show info below' }) : t('gallery.show_overlay', { defaultValue: 'Show info overlay' })}
+                >
+                    {overlayMode ? <PanelBottom size={20} /> : <PanelTop size={20} />}
+                </button>
+            )}
+
             {/* ── Zen Mode button ─────────────────────────────────────────── */}
             <button
                 onClick={() => setZenMode(!zenMode)}
-                className="absolute top-4 right-28 z-20 p-2.5 rounded-full bg-black/30 backdrop-blur-sm hover:bg-black/60 text-white transition-colors"
+                className="absolute top-4 right-40 z-20 p-2.5 rounded-full bg-black/30 backdrop-blur-sm hover:bg-black/60 text-white transition-colors"
                 aria-label={zenMode ? t('gallery.show_metadata') : t('gallery.zen_mode')}
                 title={zenMode ? t('gallery.show_metadata') : t('gallery.zen_mode')}
             >
@@ -228,10 +245,10 @@ export default function GalleryLightbox({
             )}
 
             {/* ── Layer 3: content ─────────────────────────────────────────── */}
-            <div className="relative z-10 flex flex-col items-center gap-4 w-full h-full px-16 py-6 overflow-y-auto">
+            <div className={`relative z-10 flex flex-col items-center gap-4 w-full h-full px-4 sm:px-8 lg:px-16 py-6 overflow-y-auto ${overlayMode && !zenMode ? 'justify-center' : ''}`}>
 
-                {/* Main image */}
-                <div className="flex-1 flex items-center justify-center w-full min-h-0">
+                {/* Main image container */}
+                <div className={`relative flex items-center justify-center w-full min-h-0 ${overlayMode && !zenMode ? 'h-full max-h-[92vh]' : 'flex-1'}`}>
                     {imgError || !imageUrl ? (
                         <div className="flex flex-col items-center gap-3 text-slate-500">
                             <div className="w-24 h-24 bg-slate-800 rounded-2xl flex items-center justify-center">
@@ -245,13 +262,85 @@ export default function GalleryLightbox({
                             src={imageUrl}
                             alt={current.title || t('common.untitled')}
                             onError={() => setImgError(true)}
-                            className="max-h-[70vh] max-w-full rounded-2xl object-contain shadow-2xl animate-in fade-in zoom-in-95 duration-300"
+                            className={`max-w-full rounded-2xl object-contain shadow-2xl animate-in fade-in zoom-in-95 duration-300 ${overlayMode && !zenMode ? 'max-h-[92vh] w-auto' : 'max-h-[70vh]'}`}
                         />
+                    )}
+
+                    {/* Overlay prompt card */}
+                    {overlayMode && !zenMode && !minimal && (
+                        <div className="absolute bottom-0 left-0 right-0 backdrop-blur-sm pt-4 pb-4 px-4">
+                            <div className="w-full max-w-2xl mx-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-4 space-y-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.8)]">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        {(!displaySettings || displaySettings.title) && (
+                                            <h3 className="text-white font-semibold text-sm truncate mb-0.5">
+                                                {current.title || t('common.untitled')}
+                                            </h3>
+                                        )}
+                                        <div className="flex items-center gap-3 text-[11px] text-slate-300">
+                                            {(!displaySettings || displaySettings.model) && current.model && (
+                                                <span className="truncate max-w-[160px] uppercase font-bold text-slate-400 tracking-tighter">{current.model}</span>
+                                            )}
+                                            <span>{formatDate(current.created_at)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-none">
+                                        {/* Star rating */}
+                                        {(!displaySettings || displaySettings.rating) && onUpdateRating && (
+                                            <div className="flex items-center gap-0.5">
+                                                {[1, 2, 3, 4, 5].map(star => (
+                                                    <button
+                                                        key={star}
+                                                        onClick={() => onUpdateRating(current, star === current.rating ? 0 : star)}
+                                                        className="p-0.5 hover:scale-110 transition-transform"
+                                                        aria-label={`Rate ${star} stars`}
+                                                    >
+                                                        <Star
+                                                            size={14}
+                                                            className={star <= current.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-500'}
+                                                        />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Copy prompt */}
+                                        {current.prompt_used && (
+                                            <button
+                                                onClick={handleCopyPrompt}
+                                                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                                                title={t('common.copy_prompt', { defaultValue: 'Copy prompt' })}
+                                            >
+                                                <Copy size={13} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Prompt text */}
+                                {(!displaySettings || displaySettings.prompt) && current.prompt_used && (
+                                    <div>
+                                        <p className={`text-[12px] text-slate-200 leading-relaxed ${promptExpanded ? '' : 'line-clamp-3'}`}>
+                                            {current.prompt_used}
+                                        </p>
+                                        {current.prompt_used.length > 150 && (
+                                            <button
+                                                onClick={() => setPromptExpanded(v => !v)}
+                                                className="text-[11px] text-teal-400 hover:text-teal-300 mt-1 transition-colors"
+                                            >
+                                                {promptExpanded ? t('common.show_less', { defaultValue: 'Show less' }) : t('common.show_more', { defaultValue: 'Show more' })}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
                 </div>
 
-                {/* Prompt card */}
-                {(!zenMode && !minimal) && (
+                {/* Prompt card (below image - only when not in overlay mode) */}
+                {(!zenMode && !minimal && !overlayMode) && (
                     <div className="w-full max-w-2xl bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 space-y-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.8)]">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
