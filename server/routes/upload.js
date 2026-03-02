@@ -8,11 +8,21 @@ const { encodeImageToBlurhash } = require('../lib/blurhash');
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+// Helper to get year/month path from timestamp
+function getYearMonthPath(timestamp) {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}/${month}`;
+}
+
 // Configure storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         const isVideo = ALLOWED_VIDEO_TYPES.includes(file.mimetype);
-        const uploadDir = path.join(__dirname, '../../uploads', isVideo ? 'videos' : 'images');
+        const timestamp = Date.now();
+        const yearMonth = getYearMonthPath(timestamp);
+        const uploadDir = path.join(__dirname, '../../uploads', isVideo ? 'videos' : 'images', yearMonth);
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -42,7 +52,10 @@ router.post('/', upload.single('image'), async (req, res) => {
         return res.status(400).json({ error: 'No image file provided' });
     }
 
-    const fileUrl = `http://localhost:3000/uploads/images/${req.file.filename}`;
+    // Extract timestamp from filename to build year/month path
+    const timestamp = parseInt(req.file.filename.split('-')[0], 10);
+    const yearMonth = getYearMonthPath(timestamp);
+    const fileUrl = `http://localhost:3000/uploads/images/${yearMonth}/${req.file.filename}`;
     const blurhash = await encodeImageToBlurhash(req.file.path);
 
     res.json({
@@ -61,7 +74,10 @@ router.post('/video', upload.single('video'), (req, res) => {
 
     const isVideo = ALLOWED_VIDEO_TYPES.includes(req.file.mimetype);
     const subdir = isVideo ? 'videos' : 'images';
-    const fileUrl = `http://localhost:3000/uploads/${subdir}/${req.file.filename}`;
+    // Extract timestamp from filename to build year/month path
+    const timestamp = parseInt(req.file.filename.split('-')[0], 10);
+    const yearMonth = getYearMonthPath(timestamp);
+    const fileUrl = `http://localhost:3000/uploads/${subdir}/${yearMonth}/${req.file.filename}`;
 
     res.json({
         success: true,
