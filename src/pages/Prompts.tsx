@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Loader2, BookTemplate, Heart, Search, Filter, SlidersHorizontal, Plus, Link, Trash2, Edit3, Lock, Zap, Calendar, Clock, Wand2, Copy, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Sparkles, Loader2, BookTemplate, Heart, Search, Filter, SlidersHorizontal, Plus, Link, Trash2, Edit3, Lock, Zap, Calendar, Clock, Wand2, Copy, Check, ChevronLeft, ChevronRight, X, MoreHorizontal } from 'lucide-react';
 import { formatDate } from '../lib/date-utils';
 import { db } from '../lib/api';
 import type { Prompt, GalleryItem } from '../lib/types';
@@ -177,7 +177,16 @@ export default function Prompts() {
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importUrl, setImportUrl] = useState('');
+  const [flyoutOpenId, setFlyoutOpenId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Close flyout when clicking outside
+  useEffect(() => {
+    if (!flyoutOpenId) return;
+    const handleClickOutside = () => setFlyoutOpenId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [flyoutOpenId]);
 
   useHotkeys('/', (e) => {
     e.preventDefault();
@@ -724,7 +733,8 @@ export default function Prompts() {
                         onChange={(newRating) => handleRatePrompt(prompt.id, newRating)}
                         size={13}
                       />
-                      <div className="flex flex-wrap gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Desktop: inline action buttons */}
+                      <div className="hidden sm:flex flex-wrap gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleCopy(prompt.content, prompt.id); }}
                           className="p-1.5 rounded-lg border border-slate-700/50 bg-slate-800/50 text-slate-400 hover:text-white hover:border-slate-600 hover:bg-slate-800 transition-all"
@@ -803,6 +813,90 @@ export default function Prompts() {
                         >
                           <Trash2 size={14} />
                         </button>
+                      </div>
+
+                      {/* Mobile: fly-out menu */}
+                      <div className="relative sm:hidden">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFlyoutOpenId(flyoutOpenId === prompt.id ? null : prompt.id);
+                          }}
+                          className="p-1.5 rounded-lg border border-slate-700/50 bg-slate-800/50 text-slate-400 hover:text-white hover:border-slate-600 hover:bg-slate-800 transition-all"
+                          title="Actions"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        <AnimatePresence>
+                          {flyoutOpenId === prompt.id && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.85, y: -4 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute right-0 bottom-full mb-2 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 flex flex-row gap-1"
+                            >
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCopy(prompt.content, prompt.id); setFlyoutOpenId(null); }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                                title={t('prompts.actions.copy')}
+                              >
+                                {copiedId === prompt.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleLinkImage(prompt); setFlyoutOpenId(null); }}
+                                className={`p-2 rounded-lg transition-all ${promptImages?.length ? 'text-amber-400 hover:text-amber-300' : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'}`}
+                                title={promptImages?.length ? t('prompts.actions.linked') : t('prompts.actions.link')}
+                              >
+                                <Link size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setOptimizerPrompt(prompt); setShowOptimizer(true); setFlyoutOpenId(null); }}
+                                disabled={!!promptImages?.length}
+                                className="p-2 rounded-lg text-slate-400 hover:text-purple-400 hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={promptImages?.length ? t('prompts.actions.locked') : t('prompts.actions.optimize')}
+                              >
+                                <Zap size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setImproverPrompt(prompt); setShowImprover(true); setFlyoutOpenId(null); }}
+                                disabled={!!promptImages?.length}
+                                className="p-2 rounded-lg text-slate-400 hover:text-orange-400 hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={promptImages?.length ? t('prompts.actions.locked') : t('prompts.actions.improve')}
+                              >
+                                <Sparkles size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setHistoryPrompt(prompt); setShowHistory(true); setFlyoutOpenId(null); }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition-all"
+                                title={t('prompts.actions.history')}
+                              >
+                                <Clock size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setVariationBase(prompt.content); setShowVariations(true); setFlyoutOpenId(null); }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-all"
+                                title={t('prompts.actions.variations')}
+                              >
+                                <Wand2 size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingPrompt(prompt); setShowEditor(true); setFlyoutOpenId(null); }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                                title={promptImages?.length ? t('prompts.actions.editRestricted') : t('common.edit')}
+                              >
+                                {promptImages && promptImages.length > 0 ? <Lock size={14} className="text-amber-500/80" /> : <Edit3 size={14} />}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(prompt.id); setFlyoutOpenId(null); }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-900/20 transition-all"
+                                title={t('common.delete')}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
                   </div>
