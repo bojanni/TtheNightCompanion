@@ -4,5 +4,9 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"gcm.provider": "localhost",
+		"gcm.model": "ministral-3-14b-reasoning-2512",
+		"gcm.endpoint": "http://10.0.0.2:1234/v1"
+	}
 }

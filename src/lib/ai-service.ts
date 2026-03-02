@@ -405,6 +405,7 @@ export interface ModelListItem {
   id: string;
   name: string;
   description?: string;
+  capabilities?: string[];
   pricing?: {
     prompt: string;
     completion: string;

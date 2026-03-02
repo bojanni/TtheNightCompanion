@@ -433,6 +433,34 @@ async function callDeepInfra(apiKey, system, user, model, maxTokens = 1500, temp
 async function listModels(providerConfig) {
     const { provider, apiKey, endpoint_url } = providerConfig;
 
+    const REASONING_RE = /reasoning|magistral|r1|deepseek-r|thinking|o1|o3|qwen.*thinking/i;
+    const WEB_SEARCH_RE = /online$|compound/i;
+    const CODE_RE = /codestral|code\b|coder|starcoder|deepseek-coder/i;
+    const VISION_ID_RE = /llava|vision|[\-_]vl[\-_]|pixtral|llama-4|kimi-k2/i;
+
+    function detectOpenRouterCapabilities(m) {
+        const id = m?.id ?? '';
+        const modality = m?.architecture?.modality || '';
+        const supported = Array.isArray(m?.supported_parameters) ? m.supported_parameters : [];
+
+        const isVision = modality.includes('image') || m?.pricing?.image !== undefined || VISION_ID_RE.test(id);
+        const isAudio = modality.includes('audio');
+        const isVideo = modality.includes('video');
+
+        const isOnline = id.endsWith(':online') || id.includes('online') || supported.includes('online') || WEB_SEARCH_RE.test(id);
+        const hasReasoning = supported.includes('reasoning') || REASONING_RE.test(id);
+        const isCode = CODE_RE.test(id);
+
+        const caps = ['text'];
+        if (isVision) caps.push('vision');
+        if (isAudio) caps.push('audio');
+        if (isVideo) caps.push('video');
+        if (hasReasoning) caps.push('reasoning');
+        if (isOnline) caps.push('web_search');
+        if (isCode) caps.push('code');
+        return caps;
+    }
+
     if (provider === 'local' || providerConfig.type === 'local') {
         // For local (Ollama/LM Studio), we might need different endpoints
         // Ollama: GET /api/tags
@@ -491,7 +519,8 @@ async function listModels(providerConfig) {
             id: m.id,
             name: m.name,
             description: m.description,
-            pricing: m.pricing
+            pricing: m.pricing,
+            capabilities: detectOpenRouterCapabilities(m)
         })); // OpenRouter returns proper list
     }
 

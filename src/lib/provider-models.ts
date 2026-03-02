@@ -3,7 +3,7 @@ export interface ModelOption {
   name: string;
   description?: string;
   provider?: string;
-  capabilities?: ('vision' | 'code' | 'chat')[];
+  capabilities?: string[];
   pricing?: {
     prompt: string;
     completion: string;

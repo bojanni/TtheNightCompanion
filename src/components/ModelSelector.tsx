@@ -68,6 +68,39 @@ const BADGE_COLORS: Record<string, string> = {
     Local: 'bg-slate-600/30   text-slate-300   border-slate-600/30',
 };
 
+const CAPABILITY_BADGES: Record<string, { label: string; icon: string; color: string; title: string }> = {
+    text: { label: 'Text', icon: '📝', color: 'bg-gray-100 text-gray-700', title: 'Dit model ondersteunt tekst-input en tekst-output' },
+    vision: { label: 'Vision', icon: '👁️', color: 'bg-blue-100 text-blue-700', title: 'Dit model ondersteunt afbeeldingen als input' },
+    reasoning: { label: 'Reasoning', icon: '🧠', color: 'bg-purple-100 text-purple-700', title: 'Dit model ondersteunt (expliciete) reasoning' },
+    web_search: { label: 'Web Search', icon: '🔍', color: 'bg-green-100 text-green-700', title: 'Dit model kan online/web search gebruiken' },
+    code: { label: 'Code', icon: '💻', color: 'bg-yellow-100 text-yellow-700', title: 'Dit model is geoptimaliseerd voor code' },
+    audio: { label: 'Audio', icon: '🎙️', color: 'bg-orange-100 text-orange-700', title: 'Dit model ondersteunt audio als input of output' },
+    video: { label: 'Video', icon: '🎬', color: 'bg-red-100 text-red-700', title: 'Dit model ondersteunt video als input of output' },
+};
+
+function CapabilityBadges({ capabilities }: { capabilities: string[] | undefined | null }) {
+    if (!capabilities || capabilities.length === 0) return null;
+    const unique = Array.from(new Set(capabilities));
+    return (
+        <div className="flex items-center gap-1 flex-wrap">
+            {unique.map((c) => {
+                const meta = CAPABILITY_BADGES[c];
+                if (!meta) return null;
+                return (
+                    <span
+                        key={c}
+                        title={meta.title}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${meta.color}`}
+                    >
+                        <span className="text-[10px] leading-none">{meta.icon}</span>
+                        {meta.label}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 // Task pill meta
 const TASK_META: Record<TaskType, { label: string; icon: typeof Sparkles; color: string }> = {
     generate: { label: 'Generation', icon: Sparkles, color: 'text-amber-400  bg-amber-500/10  border-amber-500/20' },
@@ -103,6 +136,8 @@ const ModelItem = forwardRef<HTMLDivElement, {
     const badge = knownMeta?.badge;
     const recommendedFor = knownMeta?.recommendedFor ?? [];
     const infoUrl = knownMeta?.infoUrl;
+
+    const capabilities = model.capabilities;
 
     const costIn = formatPrice(model.pricing?.prompt);
     const costOut = formatPrice(model.pricing?.completion);
@@ -171,6 +206,8 @@ const ModelItem = forwardRef<HTMLDivElement, {
                         <TaskPill key={t} task={t} />
                     ))}
                 </div>
+
+                <CapabilityBadges capabilities={capabilities} />
 
                 {/* Description */}
                 {description && (
