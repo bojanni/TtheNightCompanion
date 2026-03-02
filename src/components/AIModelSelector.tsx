@@ -4,6 +4,7 @@ import { AI_PROVIDER_MODELS, getModelById } from '../lib/ai-provider-models';
 import type { TaskType, AIProviderModel } from '../lib/ai-provider-models';
 import type { NormalizedModel } from '../lib/provider-models-service';
 import { COST_TIER_LABELS, formatTimeAgo } from '../lib/provider-models-service';
+import Modal from './Modal';
 
 interface AIModelSelectorProps {
     task: TaskType;
@@ -115,9 +116,11 @@ function ModelRow({
     isRecommended: boolean;
     onClick: () => void;
 }) {
+    const [detailsOpen, setDetailsOpen] = useState(false);
     return (
-        <button
-            onClick={onClick}
+        <>
+            <button
+                onClick={onClick}
             className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all border
                 ${isSelected
                     ? 'bg-slate-800 border-teal-500/50 shadow-[0_0_12px_-3px_rgba(20,184,166,0.2)]'
@@ -125,7 +128,7 @@ function ModelRow({
                 }
                 ${!isRecommended ? 'opacity-60 hover:opacity-90' : ''}
             `}
-        >
+            >
             {/* Cost column */}
             <div className="flex-none w-28 text-right">
                 {model.costIn ? (
@@ -159,7 +162,18 @@ function ModelRow({
                 <CapabilityBadges capabilities={model.capabilities} />
 
                 {model.description && (
-                    <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{model.description}</p>
+                    <div className="mb-1">
+                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{model.description}</p>
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); setDetailsOpen(true); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setDetailsOpen(true); } }}
+                            className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            Show more
+                        </span>
+                    </div>
                 )}
 
                 {model.infoUrl && (
@@ -174,7 +188,59 @@ function ModelRow({
                     </span>
                 )}
             </div>
-        </button>
+            </button>
+
+            <Modal
+                open={detailsOpen}
+                onClose={() => setDetailsOpen(false)}
+                title={model.name}
+                wide
+            >
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-300">{model.providerLabel ?? model.provider}</span>
+                        {model.badge && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${BADGE_COLORS[model.badge] ?? ''}`}>{model.badge}</span>
+                        )}
+                    </div>
+
+                    <CapabilityBadges capabilities={model.capabilities} />
+
+                    {model.recommendedFor.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {model.recommendedFor.map((t) => <TaskPill key={t} task={t} />)}
+                        </div>
+                    )}
+
+                    {model.description && (
+                        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{model.description}</p>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (in)</p>
+                            <p className="text-xs text-slate-200 font-mono">{model.costIn ?? 'Free'}</p>
+                        </div>
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (out)</p>
+                            <p className="text-xs text-slate-200 font-mono">{model.costOut ?? 'Free'}</p>
+                        </div>
+                    </div>
+
+                    {model.infoUrl && (
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => window.open(model.infoUrl, '_blank', 'noopener,noreferrer')}
+                            onKeyDown={(e) => { if (e.key === 'Enter') window.open(model.infoUrl, '_blank', 'noopener,noreferrer'); }}
+                            className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            <Info size={12} /> More info
+                        </span>
+                    )}
+                </div>
+            </Modal>
+        </>
     );
 }
 
@@ -188,6 +254,7 @@ function LiveModelRow({
     staticMeta: AIProviderModel | undefined;
     onClick: () => void;
 }) {
+    const [detailsOpen, setDetailsOpen] = useState(false);
     const costTierInfo = COST_TIER_LABELS[model.costTier];
 
     // Use static metadata for badge/description/recommendedFor if available, else derive from live data
@@ -207,17 +274,18 @@ function LiveModelRow({
     const isFree = model.costTier === 'free';
 
     return (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all border
-                ${isSelected
-                    ? 'bg-slate-800 border-teal-500/50 shadow-[0_0_12px_-3px_rgba(20,184,166,0.2)]'
-                    : 'bg-transparent border-transparent hover:bg-slate-800/60 hover:border-slate-700'
-                }
-                ${!isRecommended ? 'opacity-60 hover:opacity-90' : ''}
-                ${!model.isAvailable ? 'opacity-40' : ''}
-            `}
-        >
+        <>
+            <button
+                onClick={onClick}
+                className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all border
+                    ${isSelected
+                        ? 'bg-slate-800 border-teal-500/50 shadow-[0_0_12px_-3px_rgba(20,184,166,0.2)]'
+                        : 'bg-transparent border-transparent hover:bg-slate-800/60 hover:border-slate-700'
+                    }
+                    ${!isRecommended ? 'opacity-60 hover:opacity-90' : ''}
+                    ${!model.isAvailable ? 'opacity-40' : ''}
+                `}
+            >
             {/* Cost column */}
             <div className="flex-none w-28 text-right self-start pt-0.5">
                 {isFree ? (
@@ -264,7 +332,18 @@ function LiveModelRow({
                 <CapabilityBadges capabilities={model.capabilities} />
 
                 {description && (
-                    <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{description}</p>
+                    <div className="mb-1">
+                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{description}</p>
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); setDetailsOpen(true); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setDetailsOpen(true); } }}
+                            className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            Show more
+                        </span>
+                    </div>
                 )}
 
                 {infoUrl && (
@@ -279,7 +358,76 @@ function LiveModelRow({
                     </span>
                 )}
             </div>
-        </button>
+            </button>
+
+            <Modal
+                open={detailsOpen}
+                onClose={() => setDetailsOpen(false)}
+                title={model.name}
+                wide
+            >
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-300">{model.provider}</span>
+                        {badge && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${BADGE_COLORS[badge] ?? ''}`}>{badge}</span>
+                        )}
+                        {!model.isAvailable && (
+                            <span className="text-[10px] text-amber-400">Not available (no API key configured)</span>
+                        )}
+                    </div>
+
+                    <CapabilityBadges capabilities={model.capabilities} />
+
+                    {recommendedFor.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {recommendedFor.map((t) => <TaskPill key={t} task={t} />)}
+                            {task === 'vision' && hasVision && !recommendedFor.includes('vision') && <TaskPill task="vision" />}
+                            {task === 'research' && model.capabilities.includes('web_search') && !recommendedFor.includes('research') && <TaskPill task="research" />}
+                        </div>
+                    )}
+
+                    {description && (
+                        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{description}</p>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (in)</p>
+                            <p className="text-xs text-slate-200 font-mono">
+                                {isFree
+                                    ? 'Free'
+                                    : (model.pricing
+                                        ? `$${(parseFloat(model.pricing.prompt) * 1_000_000).toFixed(2)}/1M`
+                                        : (costTierInfo?.label ?? '–'))}
+                            </p>
+                        </div>
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (out)</p>
+                            <p className="text-xs text-slate-200 font-mono">
+                                {isFree
+                                    ? 'Free'
+                                    : (model.pricing
+                                        ? `$${(parseFloat(model.pricing.completion) * 1_000_000).toFixed(2)}/1M`
+                                        : (costTierInfo?.label ?? '–'))}
+                            </p>
+                        </div>
+                    </div>
+
+                    {infoUrl && (
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => window.open(infoUrl, '_blank', 'noopener,noreferrer')}
+                            onKeyDown={(e) => { if (e.key === 'Enter') window.open(infoUrl, '_blank', 'noopener,noreferrer'); }}
+                            className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            <Info size={12} /> More info
+                        </span>
+                    )}
+                </div>
+            </Modal>
+        </>
     );
 }
 

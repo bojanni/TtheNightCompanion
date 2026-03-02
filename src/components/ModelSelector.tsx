@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, forwardRef } from 'react';
 import { ChevronDown, Search, Info, CheckCircle2, Sparkles, Wand2, Eye, BookOpen } from 'lucide-react';
 import { getModelById } from '../lib/ai-provider-models';
 import type { TaskType } from '../lib/ai-provider-models';
+import Modal from './Modal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ModelOption {
@@ -127,7 +128,8 @@ const ModelItem = forwardRef<HTMLDivElement, {
     isSelected: boolean;
     isActive: boolean;
     onSelect: () => void;
-}>(({ model, providerName, isSelected, isActive, onSelect }, ref) => {
+    onShowMore: () => void;
+}>(({ model, providerName, isSelected, isActive, onSelect, onShowMore }, ref) => {
     // Cross-reference static metadata (badge, description, recommendedFor, infoUrl)
     // Try both "provider:id" and bare "id" to support OpenRouter dynamic models
     const knownMeta = getModelById(model.id);
@@ -211,9 +213,20 @@ const ModelItem = forwardRef<HTMLDivElement, {
 
                 {/* Description */}
                 {description && (
-                    <p className="text-[11px] text-slate-400 leading-snug line-clamp-2 mb-1">
-                        {description}
-                    </p>
+                    <div className="mb-1">
+                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">
+                            {description}
+                        </p>
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); onShowMore(); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onShowMore(); } }}
+                            className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            Show more
+                        </span>
+                    </div>
                 )}
 
                 {/* More info */}
@@ -342,6 +355,19 @@ export default function ModelSelector({
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [details, setDetails] = useState<{
+        name: string;
+        providerLabel: string;
+        description?: string | undefined;
+        costIn?: string | undefined;
+        costOut?: string | undefined;
+        capabilities?: string[] | undefined;
+        badge?: string | undefined;
+        recommendedFor?: TaskType[] | undefined;
+        infoUrl?: string | undefined;
+        isFree?: boolean | undefined;
+    } | null>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
@@ -462,6 +488,28 @@ export default function ModelSelector({
                                     isActive={activeIndex === idx}
                                     ref={el => (itemRefs.current[idx] = el)}
                                     onSelect={() => { onChange(model.id, model.provider); setIsOpen(false); setActiveIndex(-1); }}
+                                    onShowMore={() => {
+                                        const knownMeta = getModelById(model.id);
+                                        const description = knownMeta?.description ?? model.description;
+                                        const costIn = formatPrice(model.pricing?.prompt);
+                                        const costOut = formatPrice(model.pricing?.completion);
+                                        const isFree = model.id.includes(':free') || model.id.includes('free');
+                                        const providerLabel = providers.find(p => p.id === model.provider)?.name ?? model.provider;
+
+                                        setDetails({
+                                            name: model.name,
+                                            providerLabel,
+                                            description,
+                                            costIn,
+                                            costOut,
+                                            capabilities: model.capabilities,
+                                            badge: knownMeta?.badge,
+                                            recommendedFor: knownMeta?.recommendedFor,
+                                            infoUrl: knownMeta?.infoUrl,
+                                            isFree,
+                                        });
+                                        setDetailsOpen(true);
+                                    }}
                                 />
                             ))}
                         </div>
@@ -474,6 +522,63 @@ export default function ModelSelector({
                     </div>
                 </div>
             )}
+
+            <Modal
+                open={detailsOpen}
+                onClose={() => setDetailsOpen(false)}
+                title={details?.name ?? 'Model details'}
+                wide
+            >
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-300">{details?.providerLabel}</span>
+                        {details?.badge && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex-none ${BADGE_COLORS[details.badge] ?? ''}`}>
+                                {details.badge}
+                            </span>
+                        )}
+                    </div>
+
+                    <CapabilityBadges capabilities={details?.capabilities} />
+
+                    {details?.recommendedFor && details.recommendedFor.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {details.recommendedFor.map((t) => <TaskPill key={t} task={t} />)}
+                        </div>
+                    )}
+
+                    {details?.description && (
+                        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{details.description}</p>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (in)</p>
+                            <p className="text-xs text-slate-200 font-mono">
+                                {details?.isFree ? 'Free' : (details?.costIn ? details.costIn.replace('/1M', '') : '–')}
+                            </p>
+                        </div>
+                        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-500 font-mono mb-1">Pricing (out)</p>
+                            <p className="text-xs text-slate-200 font-mono">
+                                {details?.isFree ? 'Free' : (details?.costOut ? details.costOut.replace('/1M', '') : '–')}
+                            </p>
+                        </div>
+                    </div>
+
+                    {details?.infoUrl && (
+                        <span
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => window.open(details.infoUrl, '_blank', 'noopener,noreferrer')}
+                            onKeyDown={(e) => { if (e.key === 'Enter') window.open(details.infoUrl, '_blank', 'noopener,noreferrer'); }}
+                            className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-teal-400 transition-colors cursor-pointer"
+                        >
+                            <Info size={12} /> More info
+                        </span>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }
