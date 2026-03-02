@@ -20,6 +20,7 @@ import Statistics from './pages/Statistics';
 
 import ImportHub from './pages/ImportHub';
 import UsageDashboard from './pages/UsageDashboard';
+import ModelEnrichmentManager from './pages/ModelEnrichmentManager';
 
 import { ExtensionProvider } from './context/ExtensionContext';
 
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/timeline" element={<Timeline />} />
           <Route path="/import-hub" element={<ImportHub />} />
           <Route path="/usage" element={<UsageDashboard />} />
+          <Route path="/model-enrichment" element={<ModelEnrichmentManager />} />
         </Route>
       </Routes>
     </BrowserRouter>

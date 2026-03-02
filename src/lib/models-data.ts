@@ -1,3 +1,5 @@
+import type { ModelEnrichment } from './model-enrichment-service';
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -3044,4 +3046,24 @@ export function supportsNegativePrompt(modelId: string): boolean {
   if (modelId.startsWith('gpt')) return false;
   if (modelId.includes('flux')) return true;
   return true;
+}
+
+/**
+ * Returns a ModelInfo for the given model ID, optionally merged with live
+ * HuggingFace enrichment data.  Enrichment strengths/weaknesses/keywords
+ * override the (often empty) static arrays when the enrichment is present
+ * and the model has been successfully enriched.
+ */
+export function getModelInfo(modelId: string, enrichment?: ModelEnrichment | null): ModelInfo | undefined {
+  const base = MODELS.find(m => m.id === modelId);
+  if (!base) return undefined;
+  if (!enrichment || enrichment.enrichment_status !== 'enriched') return base;
+
+  return {
+    ...base,
+    strengths: enrichment.strengths ?? base.strengths,
+    weaknesses: enrichment.weaknesses ?? base.weaknesses,
+    bestFor: enrichment.best_for ?? base.bestFor,
+    keywords: enrichment.keywords ?? base.keywords,
+  };
 }
