@@ -1018,3 +1018,5 @@ function isLocalProvider(provider) {
 
 module.exports = router;
 module.exports.isLocalProvider = isLocalProvider;
+module.exports.getActiveProvider = getActiveProvider;
+module.exports.callAI = callAI;
