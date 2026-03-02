@@ -69,4 +69,11 @@ export const PROVIDERS = [
         docsUrl: 'https://deepinfra.com/dash/api_keys',
         placeholder: '...',
     },
+    {
+        id: 'huggingface',
+        name: '🤗 HuggingFace',
+        description: 'Optional. Increases rate limit from 1,000 to 100,000 requests/day. Get token at huggingface.co/settings/tokens',
+        docsUrl: 'https://huggingface.co/settings/tokens',
+        placeholder: 'hf_...',
+    },
 ];

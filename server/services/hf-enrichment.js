@@ -1,6 +1,16 @@
 'use strict';
 
 const logger = require('../lib/logger');
+const { pool } = require('../db');
+const { decrypt } = require('../lib/crypto');
+
+// Log token status at startup based on environment variable.
+// Tokens stored via the app UI are resolved lazily per-request.
+if (process.env.HF_TOKEN) {
+    logger.info('HuggingFace token: configured ✓');
+} else {
+    logger.info('HuggingFace token: not set via environment (limited to 1000 req/day; can be set via Settings)');
+}
 
 // ── Cache ────────────────────────────────────────────────────────────────────
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -9,6 +19,29 @@ const cardCache = new Map();  // hfModelId → { data, fetchedAt }
 
 function isFresh(entry) {
     return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
+}
+
+// ── Token resolution ─────────────────────────────────────────────────────────
+
+/**
+ * Resolve the HuggingFace token.
+ * Prefers the encrypted key from the API keys store; falls back to process.env.HF_TOKEN.
+ * Returns null when no token is available.
+ */
+async function getHFToken() {
+    try {
+        const result = await pool.query(
+            'SELECT encrypted_key FROM user_api_keys WHERE provider = $1 LIMIT 1',
+            ['huggingface']
+        );
+        if (result.rows.length > 0 && result.rows[0].encrypted_key) {
+            const decrypted = decrypt(result.rows[0].encrypted_key);
+            if (decrypted) return decrypted;
+        }
+    } catch (err) {
+        logger.warn('[hf-enrichment] Could not load HF token from keys store (falling back to environment variable):', err.message);
+    }
+    return process.env.HF_TOKEN || null;
 }
 
 // ── HF API helpers ───────────────────────────────────────────────────────────
@@ -23,8 +56,9 @@ async function fetchHFModelMeta(hfModelId) {
     if (isFresh(cached)) return cached.data;
 
     const headers = { 'Accept': 'application/json' };
-    if (process.env.HF_TOKEN) {
-        headers['Authorization'] = `Bearer ${process.env.HF_TOKEN}`;
+    const token = await getHFToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     const res = await fetch(`https://huggingface.co/api/models/${hfModelId}`, {
@@ -61,8 +95,9 @@ async function fetchHFModelCard(hfModelId) {
     if (isFresh(cached)) return cached.data;
 
     const headers = {};
-    if (process.env.HF_TOKEN) {
-        headers['Authorization'] = `Bearer ${process.env.HF_TOKEN}`;
+    const token = await getHFToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     const res = await fetch(`https://huggingface.co/${hfModelId}/raw/main/README.md`, {
