@@ -128,7 +128,50 @@ export async function improvePromptWithNegative(
   const prefs = taskModelToPreferences(taskModel) ?? apiPreferences;
   if (prefs) payload.apiPreferences = prefs;
   if (modelTips && modelTips.length > 0) payload.modelTips = modelTips;
-  return callAI('improve-with-negative', payload, token);
+  const result = await callAI('improve-with-negative', payload, token) as unknown;
+
+  if (result && typeof result === 'object' && 'improved' in result && 'negativePrompt' in result) {
+    return {
+      improved: String((result as { improved: unknown }).improved || '').trim(),
+      negativePrompt: String((result as { negativePrompt: unknown }).negativePrompt || '').trim()
+    };
+  }
+
+  const raw = result && typeof result === 'object' && 'raw' in result
+    ? String((result as { raw?: unknown }).raw || '')
+    : String(result || '');
+
+  const cleaned = raw
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
+    .replace(/^json\s*[:\-]?\s*/i, '')
+    .trim();
+
+  const candidates = [
+    cleaned,
+    cleaned.startsWith('[') && cleaned.endsWith(']') ? cleaned.slice(1, -1).trim() : cleaned,
+  ].map((candidate) => {
+    if (!candidate.startsWith('{') && /"[A-Za-z0-9_]+"\s*:/.test(candidate)) {
+      return `{${candidate}}`;
+    }
+    return candidate;
+  });
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')) as { improved?: unknown; negativePrompt?: unknown };
+      if (typeof parsed.improved === 'string' || typeof parsed.negativePrompt === 'string') {
+        return {
+          improved: String(parsed.improved || '').trim(),
+          negativePrompt: String(parsed.negativePrompt || '').trim()
+        };
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  throw new Error('Invalid JSON from AI');
 }
 
 export interface DetailedImprovement {

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Wrench, Clock, ChevronLeft, ChevronRight,
@@ -10,6 +10,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useExtension } from '../context/ExtensionContext';
 import { db } from '../lib/api';
+import { API_BASE_URL } from '../lib/constants';
 import { toast } from 'sonner';
 import SidebarCostWidget from './SidebarCostWidget';
 import { RateLimitWidget } from './RateLimitWidget';
@@ -69,6 +70,28 @@ export default function Layout() {
     catch { return false; }
   });
   const [savingLang, setSavingLang] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkUserProfilesApi = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/user_profiles?limit=1`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('user_profiles API health check failed:', err);
+        toast.error('Profile API unavailable', {
+          description: 'Language preferences may not persist until the backend route is available.'
+        });
+      }
+    };
+
+    checkUserProfilesApi();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleSidebar = () => {
     const next = !collapsed;

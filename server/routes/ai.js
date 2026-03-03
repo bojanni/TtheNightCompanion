@@ -974,6 +974,42 @@ router.post('/', async (req, res) => {
         let parsedResult = result;
         if (['generate', 'analyze-style', 'diagnose', 'recommend-models', 'improve-detailed', 'improve-with-negative', 'generate-variations', 'describe-character', 'random', 'optimize-for-model'].includes(action)) {
             try {
+                const tryParseJson = (value) => {
+                    try {
+                        return JSON.parse(value);
+                    } catch {
+                        return null;
+                    }
+                };
+
+                const normalizeJsonish = (value) => {
+                    if (!value || typeof value !== 'string') return value;
+                    let text = value.trim();
+
+                    // Strip markdown fences
+                    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+                    if (codeBlockMatch) {
+                        text = codeBlockMatch[1].trim();
+                    }
+
+                    // Strip leading json markers like "json", "json:", "JSON\n"
+                    text = text.replace(/^json\s*[:\-]?\s*/i, '');
+
+                    // If wrapped in [] but looks like an object payload, unwrap to object braces
+                    if (text.startsWith('[') && text.endsWith(']') && text.includes('"improved"')) {
+                        text = text.slice(1, -1).trim();
+                    }
+
+                    // If key/value pairs exist but no surrounding braces, add them
+                    if (!text.startsWith('{') && /"[A-Za-z0-9_]+"\s*:/.test(text)) {
+                        text = `{${text}}`;
+                    }
+
+                    // Remove trailing commas before closing braces/brackets
+                    text = text.replace(/,\s*([}\]])/g, '$1');
+                    return text;
+                };
+
                 let jsonStr = result;
                 // Attempt to find JSON within markdown code blocks first
                 const codeBlockMatch = result && result.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -989,7 +1025,18 @@ router.post('/', async (req, res) => {
                 }
 
                 if (jsonStr) {
-                    parsedResult = JSON.parse(jsonStr);
+                    const direct = tryParseJson(jsonStr);
+                    if (direct !== null) {
+                        parsedResult = direct;
+                    } else {
+                        const normalized = normalizeJsonish(jsonStr);
+                        const recovered = tryParseJson(normalized);
+                        if (recovered !== null) {
+                            parsedResult = recovered;
+                        } else {
+                            throw new Error('Unrecoverable JSON parse failure');
+                        }
+                    }
                 } else {
                     logger.warn('No JSON found in response');
                     // Return a safe fallback structure if possible, or just the raw text
@@ -1000,6 +1047,15 @@ router.post('/', async (req, res) => {
                 // Return raw text if parsing fails, but helpful to log what it was
                 logger.debug('Raw output was: ' + result);
                 parsedResult = { error: "Invalid JSON from AI", raw: result };
+            }
+
+            if (action === 'improve-with-negative' && parsedResult && typeof parsedResult === 'object' && !parsedResult.error) {
+                const improved = typeof parsedResult.improved === 'string' ? parsedResult.improved.trim() : '';
+                const negative = typeof parsedResult.negativePrompt === 'string' ? parsedResult.negativePrompt.trim() : '';
+                parsedResult = {
+                    improved,
+                    negativePrompt: negative
+                };
             }
         }
 
