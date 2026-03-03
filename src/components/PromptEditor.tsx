@@ -120,13 +120,13 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
     };
 
     if (prompt) {
-      setTitle(prompt.title);
-      setContent(prompt.content);
-      setNotes(prompt.notes);
-      setRating(prompt.rating);
+      setTitle(prompt.title || '');
+      setContent(prompt.content || '');
+      setNotes(prompt.notes || '');
+      setRating(Number(prompt.rating) || 0);
       setModel(prompt.model || '');
-      setIsTemplate(prompt.is_template);
-      setIsFavorite(prompt.is_favorite);
+      setIsTemplate(!!prompt.is_template);
+      setIsFavorite(!!prompt.is_favorite);
       setRevisedPrompt(prompt.revised_prompt || '');
       setNegativePrompt(prompt.negative_prompt || '');
       setSeed(prompt.seed);
@@ -140,19 +140,19 @@ export default function PromptEditor({ prompt, initialData, isLinked = false, mo
       if (lastModel) setModel(lastModel);
 
       if (initialData) {
-        if (initialData.title) {
-          setTitle(initialData.title);
+        if (initialData.title != null) {
+          setTitle(String(initialData.title));
           setAutoGenerateTitle(false);
         }
-        if (initialData.content) setContent(initialData.content);
-        if (initialData.notes) setNotes(initialData.notes);
-        if (initialData.model) setModel(initialData.model);
-        if (initialData.suggested_model) setSuggestedModel(initialData.suggested_model);
-        if (initialData.rating) setRating(initialData.rating);
+        if (initialData.content != null) setContent(String(initialData.content));
+        if (initialData.notes != null) setNotes(String(initialData.notes));
+        if (initialData.model != null) setModel(String(initialData.model));
+        if (initialData.suggested_model != null) setSuggestedModel(String(initialData.suggested_model));
+        if (initialData.rating != null) setRating(Number(initialData.rating) || 0);
         if (initialData.is_template !== undefined) setIsTemplate(initialData.is_template);
         if (initialData.is_favorite !== undefined) setIsFavorite(initialData.is_favorite);
-        if (initialData.revised_prompt) setRevisedPrompt(initialData.revised_prompt);
-        if (initialData.negative_prompt) setNegativePrompt(initialData.negative_prompt);
+        if (initialData.revised_prompt != null) setRevisedPrompt(String(initialData.revised_prompt));
+        if (initialData.negative_prompt != null) setNegativePrompt(String(initialData.negative_prompt));
       }
     }
 

@@ -147,6 +147,14 @@ const createCrudRouter = (tableName, searchableColumns = []) => {
             const onConflict = req.query.on_conflict || req.query.onConflict;
             const schema = await getTableSchema(tableName);
 
+            const filterToKnownColumns = (row) => {
+                const filtered = {};
+                Object.entries(row || {}).forEach(([key, value]) => {
+                    if (schema[key]) filtered[key] = value;
+                });
+                return filtered;
+            };
+
             // Helper to process values based on schema
             const processValue = (key, value) => {
                 if (schema[key] === 'jsonb' && typeof value === 'object' && value !== null) {
@@ -155,8 +163,13 @@ const createCrudRouter = (tableName, searchableColumns = []) => {
                 return value;
             };
 
-            const insertItems = Array.isArray(data) ? data : [data];
+            let insertItems = (Array.isArray(data) ? data : [data]).map(filterToKnownColumns);
             if (insertItems.length === 0) return res.json([]);
+
+            insertItems = insertItems.filter(item => Object.keys(item).length > 0);
+            if (insertItems.length === 0) {
+                return res.status(400).json({ error: 'No valid columns to insert' });
+            }
 
             // Auto-inject user_id if required by schema but missing (Single Tenant Fix)
             if (schema['user_id']) {
@@ -223,6 +236,12 @@ const createCrudRouter = (tableName, searchableColumns = []) => {
             if (Object.keys(data).length === 0) return res.json({ status: 'no changes' });
 
             const schema = await getTableSchema(tableName);
+
+            Object.keys(data).forEach((key) => {
+                if (!schema[key]) delete data[key];
+            });
+
+            if (Object.keys(data).length === 0) return res.json({ status: 'no valid changes' });
             const hasUpdatedAt = !!schema['updated_at'];
 
             // Build SET clause
@@ -282,6 +301,12 @@ const createCrudRouter = (tableName, searchableColumns = []) => {
             if (Object.keys(data).length === 0) return res.json({ status: 'no changes' });
 
             const schema = await getTableSchema(tableName);
+
+            Object.keys(data).forEach((key) => {
+                if (!schema[key]) delete data[key];
+            });
+
+            if (Object.keys(data).length === 0) return res.json({ status: 'no valid changes' });
             const hasUpdatedAt = !!schema['updated_at'];
 
             const updates = [];
