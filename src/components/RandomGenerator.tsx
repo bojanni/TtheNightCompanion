@@ -389,8 +389,13 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
   }
 
   async function handleMagicRandom() {
-    // Refresh model info before generating to ensure accuracy
-    await fetchActiveModel();
+    // Refresh model info, but do not block the Magic Random flow
+    Promise.race([
+      fetchActiveModel(),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).catch((err) => {
+      console.warn('Model refresh failed before Magic Random:', err);
+    });
 
     const isLocalDirty = prompt.trim().length > 0 && prompt.trim() !== lastGeneratedPrompt.trim();
     if (onCheckExternalFields) {
@@ -399,6 +404,7 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
         message: 'Generating a new prompt will clear your current AI Draft. Proceed?',
         fullClear: false
       });
+      return;
     } else {
       if (isLocalDirty) {
         confirmClear(executeMagicRandom);
