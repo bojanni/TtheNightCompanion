@@ -94,6 +94,19 @@ const SYSTEM_PROMPTS = {
     'extract-keywords': `Extract 5-10 keywords from this image prompt. Focus on: subject, style, mood, setting, color palette, art technique. Return ONLY a JSON array of lowercase single words or short phrases. Example: ["portrait", "neon", "cyberpunk", "rain", "dramatic lighting"]`
 };
 
+const JSON_ACTIONS = new Set([
+    'generate',
+    'analyze-style',
+    'diagnose',
+    'recommend-models',
+    'improve-detailed',
+    'improve-with-negative',
+    'generate-variations',
+    'describe-character',
+    'random',
+    'optimize-for-model'
+]);
+
 // ─── LLM pricing (USD per 1M tokens) ────────────────────────────────────────
 const PROVIDER_PRICING = {
     openai: {
@@ -309,24 +322,52 @@ async function callGemini(apiKey, system, user, maxTokens = 1500, temperature = 
     };
 }
 
-async function callOpenRouter(apiKey, system, user, model, maxTokens = 1500, temperature = 1.0) {
+async function callOpenRouter(apiKey, system, user, model, maxTokens = 1500, temperature = 1.0, options = {}) {
     const messages = buildMessages(system, user);
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const buildBody = (forceJson = false) => {
+        const body = {
+            model: model || 'google/gemini-2.0-pro-exp-02-05:free',
+            messages,
+            max_tokens: maxTokens,
+            temperature
+        };
+
+        if (forceJson) {
+            body.response_format = { type: 'json_object' };
+        }
+
+        return body;
+    };
+
+    const sendRequest = async (forceJson = false) => fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://nightcompanion.app', // Optional, for including your app on openrouter.ai rankings.
-            'X-Title': 'NightCompanion', // Optional. Shows in rankings on openrouter.ai.
+            'HTTP-Referer': 'https://nightcompanion.app',
+            'X-Title': 'NightCompanion',
         },
-        body: JSON.stringify({
-            model: model || 'google/gemini-2.0-pro-exp-02-05:free', // Try a reliable free model as default
-            messages: messages,
-            max_tokens: maxTokens,
-            temperature: temperature
-        })
+        body: JSON.stringify(buildBody(forceJson))
     });
+
+    let res = await sendRequest(!!options.forceJson);
+
+    if (!res.ok && options.forceJson) {
+        let retryWithoutJsonMode = false;
+        try {
+            const errorData = await res.json();
+            const errorText = JSON.stringify(errorData).toLowerCase();
+            retryWithoutJsonMode = errorText.includes('response_format') || errorText.includes('json_object') || errorText.includes('not supported');
+        } catch {
+            // ignore
+        }
+
+        if (retryWithoutJsonMode) {
+            logger.warn(`[OpenRouter] response_format unsupported for model ${model || 'default'}; retrying without forced JSON mode`);
+            res = await sendRequest(false);
+        }
+    }
 
     if (!res.ok) {
         let errorMsg = 'OpenRouter error';
@@ -559,7 +600,7 @@ async function listModels(providerConfig) {
     return [];
 }
 
-async function callAI(providerConfig, system, user, maxTokens = 1500, temperature = 1.0) {
+async function callAI(providerConfig, system, user, maxTokens = 1500, temperature = 1.0, options = {}) {
     if (providerConfig.type === 'local') {
         // Local usually doesn't support vision easily via standard OpenAI endpoint unless specific model
         // We'll flatten to text if possible or error out for vision
@@ -611,7 +652,7 @@ async function callAI(providerConfig, system, user, maxTokens = 1500, temperatur
         case 'openai': return callOpenAI(apiKey, system, user, maxTokens, temperature, model);
         case 'anthropic': return callAnthropic(apiKey, system, user, maxTokens, temperature, model);
         case 'gemini': return callGemini(apiKey, system, user, maxTokens, temperature, model);
-        case 'openrouter': return callOpenRouter(apiKey, system, user, model, maxTokens, temperature);
+        case 'openrouter': return callOpenRouter(apiKey, system, user, model, maxTokens, temperature, options);
         case 'together': return callTogether(apiKey, system, user, model, maxTokens, temperature);
         case 'deepinfra': return callDeepInfra(apiKey, system, user, model, maxTokens, temperature);
         default: throw new Error(`Unknown provider: ${provider}`);
@@ -809,6 +850,10 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Invalid action' });
         }
 
+        if (JSON_ACTIONS.has(action)) {
+            temperature = Math.min(temperature, 0.4);
+        }
+
         async function getProviderCredentials(providerId) {
             if (['ollama', 'lmstudio'].includes(providerId)) {
                 const local = await pool.query(
@@ -935,7 +980,10 @@ router.post('/', async (req, res) => {
             fs.appendFile(path.join(__dirname, '../../logs/api.log'), reqLog, (err) => { if (err) console.error('Error writing to api.log', err); });
         }
 
-        const { content: result, usage } = await callAI(provider, systemPrompt, userPrompt, maxTokens, temperature);
+        const { content: result, usage } = await callAI(provider, systemPrompt, userPrompt, maxTokens, temperature, {
+            forceJson: JSON_ACTIONS.has(action),
+            action
+        });
 
         const promptTokens = usage?.prompt_tokens || 0;
         const completionTokens = usage?.completion_tokens || 0;
@@ -972,7 +1020,7 @@ router.post('/', async (req, res) => {
 
         // Parse JSON if needed (for actions that return JSON)
         let parsedResult = result;
-        if (['generate', 'analyze-style', 'diagnose', 'recommend-models', 'improve-detailed', 'improve-with-negative', 'generate-variations', 'describe-character', 'random', 'optimize-for-model'].includes(action)) {
+        if (JSON_ACTIONS.has(action)) {
             try {
                 const tryParseJson = (value) => {
                     try {
