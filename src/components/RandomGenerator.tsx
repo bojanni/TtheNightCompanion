@@ -48,11 +48,11 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
 
   // Sync state when initialPrompt changes (e.g. from Magic Prompt Input)
   useEffect(() => {
-    if (initialPrompt !== undefined) {
+    if (initialPrompt !== undefined && initialPrompt !== prompt) {
       setPrompt(initialPrompt);
       setLastGeneratedPrompt(initialPrompt);
     }
-  }, [initialPrompt]);
+  }, [initialPrompt, prompt]);
 
   const [filters, setFilters] = useState<FilterState>({ dreamy: false, characters: false, cinematic: false });
   const [creativityLevel, setCreativityLevel] = useState<'focused' | 'balanced' | 'wild'>('balanced');
@@ -116,7 +116,7 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
   }, [aiAdvice]);
 
   const confirmClear = (action: (keepNegative: boolean) => void) => {
-    if (prompt.trim()) {
+    if (prompt.trim() || negativePrompt.trim()) {
       setPendingAction(() => action);
       setShowClearModal(true);
     } else {
@@ -397,7 +397,7 @@ export default function RandomGenerator({ onSwitchToGuided, onSwitchToManual, on
       console.warn('Model refresh failed before Magic Random:', err);
     });
 
-    const isLocalDirty = prompt.trim().length > 0 && prompt.trim() !== lastGeneratedPrompt.trim();
+    const isLocalDirty = prompt.trim().length > 0 || negativePrompt.trim().length > 0;
     if (onCheckExternalFields) {
       onCheckExternalFields(executeMagicRandom, isLocalDirty, {
         title: 'Clear AI Draft?',
