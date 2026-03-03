@@ -65,6 +65,7 @@ app.use('/api/batch_tests', createCrudRouter('batch_tests'));
 app.use('/api/batch_test_prompts', createCrudRouter('batch_test_prompts'));
 app.use('/api/batch_test_results', createCrudRouter('batch_test_results'));
 app.use('/api/model_usage', createCrudRouter('model_usage'));
+app.use('/api/user_profiles', createCrudRouter('user_profiles'));
 app.use('/api/nc-models', ncModelsRouter);
 app.use('/api/models', require('./routes/model-enrichment'));
 

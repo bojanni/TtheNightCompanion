@@ -82,7 +82,7 @@ export default function Layout() {
       await i18n.changeLanguage(lng);
       const { error } = await db
         .from('user_profiles')
-        .update({ language: lng });
+        .upsert({ email: 'local@user.com', language: lng }, { onConflict: 'email' });
 
       if (error) {
         console.error('Failed to save language to DB:', error);
