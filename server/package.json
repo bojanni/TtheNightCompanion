@@ -6,7 +6,8 @@
     "scripts": {
         "start": "node index.js",
         "dev": "nodemon index.js",
-        "setup-db": "node db-init.js"
+        "setup-db": "node db-init.js",
+        "test:async-handler": "node scripts/test-async-handler.js"
     },
     "dependencies": {
         "blurhash": "^2.0.5",

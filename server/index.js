@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const logger = require('./lib/logger');
 const express = require('express');
+const enableAsyncHandler = require('./middleware/enable-async-handler');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const { pool } = require('./db');
@@ -10,6 +11,7 @@ const { initSchema } = require('./db-init');
 const errorMiddleware = require('./middleware/error-handler');
 const { handlePgError } = require('./lib/pg-error-handler');
 
+enableAsyncHandler(express);
 const app = express();
 const port = process.env.PORT || 3000;
 let httpServer = null;
