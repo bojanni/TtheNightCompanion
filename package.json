@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:diversity": "node --test --experimental-strip-types src/lib/diversity-context.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "schema:drift-check": "node scripts/schema-drift-check.js",
     "electron": "cross-env NODE_ENV=development .\\node_modules\\electron\\dist\\electron.exe .",
