@@ -12,6 +12,8 @@ const { handlePgError } = require('./lib/pg-error-handler');
 
 const app = express();
 const port = process.env.PORT || 3000;
+let httpServer = null;
+let isShuttingDown = false;
 
 let dbReady = false;
 let dbInitError = null;
@@ -177,8 +179,58 @@ app.get('/api/db-test', async (req, res) => {
 // Error handling middleware should be the last app.use()
 app.use(errorMiddleware);
 
-app.listen(port, () => {
+httpServer = app.listen(port, () => {
   logger.info(`✅ Server running on http://localhost:${port}`);
+});
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+  try {
+    // Close SSE connections so clients do not hang during shutdown.
+    for (const client of sseClients) {
+      try {
+        client.end();
+      } catch (e) {
+        // Ignore individual client close failures.
+      }
+    }
+    sseClients.clear();
+
+    await new Promise((resolve) => {
+      if (!httpServer) {
+        resolve();
+        return;
+      }
+
+      httpServer.close((err) => {
+        if (err) {
+          logger.error('Error while closing HTTP server:', err);
+        }
+        resolve();
+      });
+    });
+
+    await pool.end();
+    logger.info('✅ PostgreSQL pool closed. Shutdown complete.');
+    process.exit(0);
+  } catch (err) {
+    logger.error('❌ Graceful shutdown failed:', err);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => {
+  void gracefulShutdown('SIGTERM');
+});
+
+process.on('SIGINT', () => {
+  void gracefulShutdown('SIGINT');
 });
 
 // Initialize DB and start background tasks
