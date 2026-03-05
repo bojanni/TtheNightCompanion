@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS prompts (
     seed INTEGER,
     aspect_ratio TEXT,
     use_custom_aspect_ratio BOOLEAN DEFAULT FALSE,
+    start_image TEXT,
     gallery_item_id UUID,
     use_count INTEGER DEFAULT 0,
     last_used_at TIMESTAMP WITH TIME ZONE,
@@ -102,6 +103,8 @@ CREATE TABLE IF NOT EXISTS character_details (
     character_id UUID REFERENCES characters(id) ON DELETE CASCADE,
     key TEXT NOT NULL,
     value TEXT,
+    detail TEXT,
+    works_well BOOLEAN DEFAULT FALSE,
     category TEXT
 );
 
