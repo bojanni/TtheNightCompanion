@@ -6,6 +6,7 @@ import ModelCompareView, { type CompareModel } from '../components/ModelCompareV
 import { MODELS } from '../lib/models-data';
 import { loadModelCompareSelection, saveModelCompareSelection } from '../lib/model-compare-storage';
 import { useTranslation } from 'react-i18next';
+import { getAllEnrichments, type ModelEnrichment } from '../lib/model-enrichment-service';
 
 interface NCModel {
   id: number;
@@ -18,6 +19,8 @@ interface NCModel {
   cost_level: number;
   model_type: 'Image' | 'Edit' | 'Video';
 }
+
+type EnrichmentMap = Record<string, ModelEnrichment>;
 
 type SortField = 'name' | 'art_rating' | 'prompting_rating' | 'realism_rating' | 'typography_rating' | 'cost_level';
 type SortOrder = 'asc' | 'desc';
@@ -56,8 +59,19 @@ export default function NCModels() {
   const [sortBy, setSortBy] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>(() => loadModelCompareSelection());
+  const [enrichments, setEnrichments] = useState<EnrichmentMap>({});
 
   const modelKey = (model: NCModel) => model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const getEnrichment = (model: NCModel): ModelEnrichment | null => {
+    const slug = modelKey(model);
+    if (enrichments[slug]) return enrichments[slug];
+
+    const linked = MODELS.find((m) => m.name === model.name);
+    if (linked?.id && enrichments[linked.id]) return enrichments[linked.id];
+
+    return null;
+  };
 
   const toCompareModel = (model: NCModel): CompareModel => {
     const linked = MODELS.find((m) => m.name === model.name);
@@ -135,6 +149,30 @@ export default function NCModels() {
   useEffect(() => {
     saveModelCompareSelection(selectedCompareIds);
   }, [selectedCompareIds]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchEnrichments() {
+      try {
+        const list = await getAllEnrichments();
+        if (cancelled) return;
+
+        const byId: EnrichmentMap = {};
+        for (const item of list) {
+          byId[item.nightcafe_model_id] = item;
+        }
+        setEnrichments(byId);
+      } catch (err) {
+        console.warn('Could not load model enrichments', err);
+      }
+    }
+
+    fetchEnrichments();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSync = async () => {
     try {
@@ -308,6 +346,8 @@ export default function NCModels() {
           {models.map((model) => {
             const compareId = modelKey(model);
             const isSelectedForCompare = selectedCompareIds.includes(compareId);
+            const enrichment = getEnrichment(model);
+            const hasHfData = enrichment?.enrichment_status === 'enriched';
             return (
             <div key={model.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-colors group flex flex-col h-full">
               {/* Image Header */}
@@ -351,6 +391,55 @@ export default function NCModels() {
                 <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed flex-1">
                   {model.description}
                 </p>
+
+                {hasHfData && (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300">HuggingFace Insights</span>
+                      {enrichment?.hf_model_id && (
+                        <a
+                          href={`https://huggingface.co/${enrichment.hf_model_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-emerald-300 hover:text-emerald-200 underline"
+                        >
+                          View Model
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[10px] text-slate-300">
+                      {typeof enrichment?.hf_downloads === 'number' && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-700">DL {enrichment.hf_downloads.toLocaleString()}</span>
+                      )}
+                      {typeof enrichment?.hf_likes === 'number' && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-700">Likes {enrichment.hf_likes.toLocaleString()}</span>
+                      )}
+                    </div>
+                    {Array.isArray(enrichment?.hf_tags) && enrichment.hf_tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {enrichment.hf_tags.slice(0, 4).map((tag) => (
+                          <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div className="rounded-md bg-slate-900/60 border border-slate-700 p-1.5">
+                        <p className="text-slate-500 uppercase tracking-wide">Strong</p>
+                        <p className="text-slate-200 mt-1">{enrichment?.strengths?.[0] || '-'}</p>
+                      </div>
+                      <div className="rounded-md bg-slate-900/60 border border-slate-700 p-1.5">
+                        <p className="text-slate-500 uppercase tracking-wide">Weak</p>
+                        <p className="text-slate-200 mt-1">{enrichment?.weaknesses?.[0] || '-'}</p>
+                      </div>
+                      <div className="rounded-md bg-slate-900/60 border border-slate-700 p-1.5">
+                        <p className="text-slate-500 uppercase tracking-wide">Best For</p>
+                        <p className="text-slate-200 mt-1">{enrichment?.best_for?.[0] || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1.5 mt-auto pt-2 border-t border-slate-800/50">
                   <StatBar label="Art" value={model.art_rating} />
