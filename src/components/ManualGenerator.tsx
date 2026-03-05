@@ -144,8 +144,6 @@ export default function ManualGenerator({ onSaved, maxWords, initialPrompts, ini
 
     const fetchActiveModel = useCallback(async () => {
         try {
-            await db.auth.getSession();
-
             // Check cloud providers FIRST (matches Settings precedence)
             const keys = await listApiKeys();
             const activeKey = keys.find(k => k.is_active_gen || k.is_active); // Prioritize gen flag
@@ -171,14 +169,13 @@ export default function ManualGenerator({ onSaved, maxWords, initialPrompts, ini
 
                 // If activeKey is openrouter but we don't have pricing, try to fetch it
                 if (activeKey.provider === 'openrouter' && !activeModelPricing) {
-                    db.auth.getSession().then(({ data }: { data: { session: { access_token: string } | null } }) => {
-                        const token = data.session?.access_token || '';
-                        listModels(token, 'openrouter').then((routerModels: ModelListItem[]) => {
+                    listModels('', 'openrouter')
+                        .then((routerModels: ModelListItem[]) => {
                             try {
                                 const existingCache = localStorage.getItem('cachedModels');
                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 const cache: any = existingCache ? JSON.parse(existingCache) : {};
-                                cache['openrouter'] = routerModels;
+                                cache.openrouter = routerModels;
                                 localStorage.setItem('cachedModels', JSON.stringify(cache));
 
                                 const found = routerModels.find((m) => m.id === model);
@@ -186,9 +183,11 @@ export default function ManualGenerator({ onSaved, maxWords, initialPrompts, ini
                                     const newPricing = found.pricing;
                                     setActiveModelPricing(prev => prev?.prompt === newPricing.prompt && prev?.completion === newPricing.completion ? prev : newPricing);
                                 }
-                            } catch (e) { console.error("Failed to update cache", e); }
-                        }).catch((err: unknown) => console.error("Failed to fetch openrouter models", err));
-                    });
+                            } catch (e) {
+                                console.error('Failed to update cache', e);
+                            }
+                        })
+                        .catch((err: unknown) => console.error('Failed to fetch openrouter models', err));
                     return;
                 }
 

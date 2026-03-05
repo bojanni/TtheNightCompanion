@@ -62,7 +62,6 @@ export function PromptImprover({ prompt, onApply }: PromptImproverProps) {
 
   const handleSave = async (text: string) => {
     try {
-      await db.auth.getUser(); // Get user for later just in case
       // Local DB insert
       const { data: newPrompt, error } = await db.from('prompts').insert({
         title: 'Improved: ' + (text.split(',')[0] || 'Untitled').slice(0, 30),
