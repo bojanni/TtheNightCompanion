@@ -9,6 +9,7 @@ import { getDefaultModelForProvider } from '../../lib/provider-models';
 import { toast } from 'sonner';
 import { useProviderHealth } from '../../lib/provider-health';
 import ModelSelector from '../../components/ModelSelector';
+import { getRateLimitInfo, formatRetryWindow } from '../../lib/rate-limit';
 
 interface DashboardProps {
     activeGen: ApiKeyInfo | LocalEndpoint | undefined;
@@ -142,7 +143,7 @@ function ProviderStatusCard({
     dynamicModels, setDynamicModels, onRefreshData, getToken, colorClass
 }: ProviderStatusCardProps) {
     const [loading, setLoading] = useState(false);
-    const { health, checkHealth } = useProviderHealth();
+    const { health, checkHealth, reportRateLimit } = useProviderHealth();
 
     const getProviderId = (p: ApiKeyInfo | LocalEndpoint) => {
         if ('endpoint_url' in p) return `local-${p.provider}-${p.id}`;
@@ -161,6 +162,12 @@ function ProviderStatusCard({
     const handleHealthCheck = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (activeProvider) checkHealth(currentProviderId, activeProvider);
+    };
+
+    const showRateLimitToast = (providerName: string, retryAfterSeconds: number | null) => {
+        toast.warning(`${providerName} is tijdelijk gelimiteerd`, {
+            description: `Probeer opnieuw in ${formatRetryWindow(retryAfterSeconds)} of kies een andere provider.`
+        });
     };
 
     const getModels = (p: ApiKeyInfo | LocalEndpoint) => {
@@ -233,6 +240,12 @@ function ProviderStatusCard({
             }
             setDynamicModels(prev => ({ ...prev, [activeProvider.provider]: models }));
         } catch (err) {
+            const rl = getRateLimitInfo(err);
+            if (rl.isRateLimited) {
+                reportRateLimit(currentProviderId, err);
+                showRateLimitToast(activeProvider.provider, rl.retryAfterSeconds);
+                return;
+            }
             toast.error('Failed to test pricing');
             console.error(err);
         } finally {
@@ -250,6 +263,12 @@ function ProviderStatusCard({
             checkHealth(currentProviderId, activeProvider);
             toast.success('Models refreshed');
         } catch (err) {
+            const rl = getRateLimitInfo(err);
+            if (rl.isRateLimited) {
+                reportRateLimit(currentProviderId, err);
+                showRateLimitToast(activeProvider.provider, rl.retryAfterSeconds);
+                return;
+            }
             toast.error('Failed to refresh models');
             console.error(err);
         } finally {
@@ -300,14 +319,17 @@ function ProviderStatusCard({
                             <div
                                 onClick={handleHealthCheck}
                                 className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer transition-colors hover:bg-slate-800/50 ${providerHealth.status === 'ok' ? 'text-green-500' :
-                                    providerHealth.status === 'error' ? 'text-red-500' : 'text-slate-500'
+                                    providerHealth.status === 'error' ? 'text-red-500' :
+                                        providerHealth.status === 'rate_limited' ? 'text-amber-400' : 'text-slate-500'
                                     }`}
                                 title={providerHealth.error || 'Click to re-check health'}
                             >
                                 <div className={`w-1.5 h-1.5 rounded-full ${providerHealth.status === 'ok' ? 'bg-green-500' :
-                                    providerHealth.status === 'error' ? 'bg-red-500' : 'bg-slate-500 animate-pulse'
+                                    providerHealth.status === 'error' ? 'bg-red-500' :
+                                        providerHealth.status === 'rate_limited' ? 'bg-amber-400' : 'bg-slate-500 animate-pulse'
                                     }`} />
                                 {providerHealth.status === 'loading' ? <span>checking...</span>
+                                    : providerHealth.status === 'rate_limited' ? <span>limited</span>
                                     : providerHealth.status === 'error' ? <span>error</span>
                                         : <span>{providerHealth.latency}ms</span>}
                             </div>
@@ -328,6 +350,8 @@ function ProviderStatusCard({
                             value={currentProviderId}
                             onChange={handleProviderChange}
                             disabled={loading}
+                            aria-label={`${label} provider`}
+                            title={`${label} provider`}
                             className="w-full appearance-none bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-slate-500 transition-colors disabled:opacity-50"
                         >
                             {allProviders.length === 0 && <option value="">No Configured Providers</option>}
@@ -374,13 +398,16 @@ function ProviderStatusCard({
                                     type="text"
                                     value={activeModelName}
                                     disabled
+                                    aria-label={`${label} model`}
+                                    title={`${label} model`}
+                                    placeholder="No model loaded"
                                     className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-400 italic"
                                 />
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                                     <button onClick={handleTestPricing} className="p-1 hover:bg-slate-700 rounded transition-colors" title="Test Pricing">
                                         <BadgeDollarSign size={12} className="text-slate-500 hover:text-green-400" />
                                     </button>
-                                    <button onClick={handleRefreshModels} className="p-1 hover:bg-slate-700 rounded transition-colors">
+                                    <button onClick={handleRefreshModels} className="p-1 hover:bg-slate-700 rounded transition-colors" title="Refresh Models">
                                         <RefreshCw size={12} className={loading ? 'animate-spin text-teal-500' : 'text-slate-500'} />
                                     </button>
                                 </div>

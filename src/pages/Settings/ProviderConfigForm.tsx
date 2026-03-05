@@ -10,6 +10,8 @@ import type { ModelOption } from '../../lib/provider-models';
 import { listModels } from '../../lib/ai-service';
 import ModelSelector from '../../components/ModelSelector';
 import { toast } from 'sonner';
+import { useProviderHealth } from '../../lib/provider-health';
+import { getRateLimitInfo, formatRetryWindow } from '../../lib/rate-limit';
 
 export interface ProviderConfigFormProps {
     provider: {
@@ -47,6 +49,9 @@ export function ProviderConfigForm({
 
     const [showKey, setShowKey] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const { health, reportRateLimit } = useProviderHealth();
+    const providerHealthId = `cloud-${provider.id}`;
+    const providerHealth = health[providerHealthId];
 
     useEffect(() => {
         if (keyInfo) {
@@ -79,6 +84,15 @@ export function ProviderConfigForm({
                     )}
                 </h3>
                 <p className="text-sm text-slate-400 mt-1">{provider.description}</p>
+                {providerHealth?.status === 'rate_limited' && (
+                    <div
+                        className="inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300"
+                        title={providerHealth.error || 'Provider rate limit reached'}
+                    >
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span>Rate limited</span>
+                    </div>
+                )}
                 <a
                     href={provider.docsUrl}
                     target="_blank"
@@ -179,6 +193,14 @@ export function ProviderConfigForm({
             toast.success('Models list updated');
             console.log(`Fetched ${models.length} models for ${provider.id}`, models);
         } catch (e) {
+            const rl = getRateLimitInfo(e);
+            if (rl.isRateLimited) {
+                reportRateLimit(providerHealthId, e);
+                toast.warning(`${provider.name} is tijdelijk gelimiteerd`, {
+                    description: `Probeer opnieuw in ${formatRetryWindow(rl.retryAfterSeconds)} of kies een andere provider.`
+                });
+                return;
+            }
             toast.error(e instanceof Error ? e.message : 'Failed to fetch models');
         } finally {
             setActionLoading(null);
@@ -213,6 +235,14 @@ export function ProviderConfigForm({
             toast.success('Connection successful! API key is valid.');
         } catch (e) {
             console.error(e);
+            const rl = getRateLimitInfo(e);
+            if (rl.isRateLimited) {
+                reportRateLimit(providerHealthId, e);
+                toast.warning(`${provider.name} is tijdelijk gelimiteerd`, {
+                    description: `Probeer opnieuw in ${formatRetryWindow(rl.retryAfterSeconds)} of test een andere provider.`
+                });
+                return;
+            }
             toast.error(e instanceof Error ? e.message : 'Connection failed. Please check your API key.');
         } finally {
             setActionLoading(null);

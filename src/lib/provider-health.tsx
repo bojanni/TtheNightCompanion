@@ -1,23 +1,46 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { listModels } from './ai-service';
 import type { ApiKeyInfo, LocalEndpoint } from './api-keys-service';
+import { getRateLimitInfo } from './rate-limit';
 
 export interface ProviderHealth {
-    status: 'ok' | 'error' | 'loading' | 'idle';
+    status: 'ok' | 'error' | 'loading' | 'idle' | 'rate_limited';
     latency: number | null;
     lastCheck: number;
     error?: string;
+    rateLimitedUntil?: number | null;
 }
 
 interface ProviderHealthContextType {
     health: Record<string, ProviderHealth>;
     checkHealth: (providerId: string, providerConfig: ApiKeyInfo | LocalEndpoint) => Promise<void>;
+    reportRateLimit: (providerId: string, error: unknown) => void;
 }
 
 const ProviderHealthContext = createContext<ProviderHealthContextType | undefined>(undefined);
 
 export function ProviderHealthProvider({ children }: { children: React.ReactNode }) {
     const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
+
+    const reportRateLimit = useCallback((providerId: string, error: unknown) => {
+        const rl = getRateLimitInfo(error);
+        if (!rl.isRateLimited) return;
+
+        const rateLimitedUntil = rl.retryAfterSeconds
+            ? Date.now() + (rl.retryAfterSeconds * 1000)
+            : null;
+
+        setHealth(prev => ({
+            ...prev,
+            [providerId]: {
+                status: 'rate_limited',
+                latency: null,
+                lastCheck: Date.now(),
+                error: rl.message || 'Rate limit reached for this provider',
+                rateLimitedUntil
+            }
+        }));
+    }, []);
 
     const checkHealth = useCallback(async (providerId: string, providerConfig: ApiKeyInfo | LocalEndpoint) => {
         // Set loading state
@@ -62,26 +85,47 @@ export function ProviderHealthProvider({ children }: { children: React.ReactNode
                 [providerId]: {
                     status: 'ok',
                     latency,
-                    lastCheck: Date.now()
+                    lastCheck: Date.now(),
+                    rateLimitedUntil: null
                 } as ProviderHealth
             }));
 
         } catch (err) {
             console.error(`Health check failed for ${providerId}:`, err);
+            const rl = getRateLimitInfo(err);
+            if (rl.isRateLimited) {
+                const rateLimitedUntil = rl.retryAfterSeconds
+                    ? Date.now() + (rl.retryAfterSeconds * 1000)
+                    : null;
+
+                setHealth(prev => ({
+                    ...prev,
+                    [providerId]: {
+                        status: 'rate_limited',
+                        latency: null,
+                        lastCheck: Date.now(),
+                        error: rl.message || 'Rate limit reached for this provider',
+                        rateLimitedUntil
+                    }
+                }));
+                return;
+            }
+
             setHealth(prev => ({
                 ...prev,
                 [providerId]: {
                     status: 'error',
                     latency: null,
                     lastCheck: Date.now(),
-                    error: err instanceof Error ? err.message : 'Unknown error'
+                    error: err instanceof Error ? err.message : 'Unknown error',
+                    rateLimitedUntil: null
                 }
             }));
         }
     }, []);
 
     return (
-        <ProviderHealthContext.Provider value={{ health, checkHealth }}>
+        <ProviderHealthContext.Provider value={{ health, checkHealth, reportRateLimit }}>
             {children}
         </ProviderHealthContext.Provider>
     );
