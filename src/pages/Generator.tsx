@@ -14,6 +14,7 @@ import { db } from '../lib/api';
 import type { Prompt } from '../lib/types';
 import { PRESET_OPTIONS } from '../lib/models-data';
 import { API_BASE_URL } from '../lib/constants';
+import { getPromptDiversityThreshold } from '../lib/user-settings';
 
 
 type Mode = 'random' | 'guided' | 'remix' | 'manual';
@@ -221,6 +222,8 @@ export default function Generator() {
     setSimilarPromptData(null);
     if (data.content) {
       try {
+        const similarityThreshold = getPromptDiversityThreshold();
+
         // 1. Check exact match
         const { data: existingPrompts } = await db
           .from('prompts')
@@ -235,11 +238,13 @@ export default function Generator() {
         }
 
         // 2. Check similarity match
-        const res = await fetch(`${API_BASE_URL}/api/prompts/similar?content=${encodeURIComponent(data.content)}`);
+        const res = await fetch(
+          `${API_BASE_URL}/api/prompts/similar?content=${encodeURIComponent(data.content)}&threshold=${similarityThreshold}`
+        );
         if (res.ok) {
           const similar = await res.json();
-          // Only flag if similarity > 0.85 and it's not the exact same prompt (which is handled above)
-          if (similar && similar.length > 0 && similar[0].sim > 0.85) {
+          // Only flag if similarity exceeds the user-configured threshold.
+          if (similar && similar.length > 0 && similar[0].sim >= similarityThreshold) {
             setSimilarPromptData({ existing: similar[0], new: data });
             return;
           }

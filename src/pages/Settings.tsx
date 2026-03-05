@@ -2,17 +2,29 @@ import { useState } from 'react';
 import { ChevronDown, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DataManagement } from '../components/DataManagement';
+import {
+  getPromptDiversityThreshold,
+  setPromptDiversityThreshold,
+  PROMPT_DIVERSITY_THRESHOLD_MIN,
+  PROMPT_DIVERSITY_THRESHOLD_MAX,
+} from '../lib/user-settings';
 
 export default function Settings() {
   const { t } = useTranslation();
   const [isDataManagementOpen, setIsDataManagementOpen] = useState(true);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(true);
   const [apiLogging, setApiLogging] = useState(() => localStorage.getItem('nc_api_logging_enabled') === 'true');
+  const [diversityThreshold, setDiversityThreshold] = useState(() => getPromptDiversityThreshold());
 
   const toggleApiLogging = () => {
     const newValue = !apiLogging;
     setApiLogging(newValue);
     localStorage.setItem('nc_api_logging_enabled', String(newValue));
+  };
+
+  const onDiversityThresholdChange = (value: number) => {
+    const saved = setPromptDiversityThreshold(value);
+    setDiversityThreshold(saved);
   };
 
   return (
@@ -47,8 +59,6 @@ export default function Settings() {
                         <button
                           onClick={toggleApiLogging}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${apiLogging ? 'bg-teal-500' : 'bg-slate-700'}`}
-                          role="switch"
-                          aria-checked={apiLogging ? 'true' : 'false'}
                           title="Toggle API Logging"
                         >
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${apiLogging ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -57,6 +67,38 @@ export default function Settings() {
                       <p className="text-sm text-slate-400">
                         Log all raw outbound AI requests and responses (system prompts, usage stats) to the terminal console and Browser DevTools. Enable this for troubleshooting prompt generation or LLM issues.
                       </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-6 mt-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-teal-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-teal-300 font-bold">%</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-xl font-bold text-white">Prompt Repetition Sensitivity</h2>
+                        <span className="text-sm font-semibold text-teal-300">{Math.round(diversityThreshold * 100)}%</span>
+                      </div>
+                      <p className="text-sm text-slate-400 mb-4">
+                        Stel in vanaf welke similarity een prompt als te repetitief wordt beschouwd bij opslaan in Generator.
+                        Lager = strenger, hoger = toleranter.
+                      </p>
+                      <input
+                        type="range"
+                        min={PROMPT_DIVERSITY_THRESHOLD_MIN}
+                        max={PROMPT_DIVERSITY_THRESHOLD_MAX}
+                        step={0.01}
+                        value={diversityThreshold}
+                        onChange={(e) => onDiversityThresholdChange(parseFloat(e.target.value))}
+                        className="w-full accent-teal-500"
+                        aria-label="Prompt repetition sensitivity"
+                      />
+                      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                        <span>{Math.round(PROMPT_DIVERSITY_THRESHOLD_MIN * 100)}% (streng)</span>
+                        <span>{Math.round(PROMPT_DIVERSITY_THRESHOLD_MAX * 100)}% (tolerant)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
