@@ -241,5 +241,27 @@
         "apiKeys": "API-sleutels",
         "localEndpoints": "Lokale Endpoints",
         "configuration": "Configuratie"
+    },
+    "modelCompare": {
+        "compare": "Vergelijk",
+        "compared": "Vergeleken",
+        "maxReached": "Je kunt maximaal 4 modellen tegelijk vergelijken.",
+        "nightCafeTitle": "Vergelijk NightCafe Modellen",
+        "recommendedTitle": "Vergelijk Aanbevolen Modellen",
+        "selectRange": "Selecteer {{min}}-{{max}} modellen om te vergelijken.",
+        "reset": "Vergelijking resetten",
+        "exportCsv": "Exporteer CSV",
+        "searchPlaceholder": "Zoek model om toe te voegen...",
+        "removeFromCompare": "Verwijder {{name}} uit vergelijking",
+        "pickAtLeastTwo": "Kies minimaal 2 modellen om de vergelijkingstabel te tonen.",
+        "na": "n.v.t.",
+        "columns": {
+            "name": "Naam",
+            "type": "Type",
+            "starRating": "Sterbeoordeling",
+            "costRating": "Kostenbeoordeling",
+            "dutchDescription": "Nederlandse beschrijving",
+            "capabilities": "Capaciteiten"
+        }
     }
 }

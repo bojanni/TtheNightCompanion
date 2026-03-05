@@ -4,6 +4,8 @@ import { analyzePrompt, getTopCandidates, MODELS, type ModelInfo } from '../lib/
 import { recommendModels } from '../lib/ai-service';
 import { handleAIError } from '../lib/error-handler';
 import ModelCompareView, { type CompareModel } from './ModelCompareView';
+import { loadModelCompareSelection, saveModelCompareSelection } from '../lib/model-compare-storage';
+import { useTranslation } from 'react-i18next';
 
 const BUDGET_OPTIONS = [
     { value: 'low', label: 'Budget', desc: 'Cheap & fast' },
@@ -48,13 +50,14 @@ function RatingDots({ value, max = 5, color }: { value: number; max?: number; co
 }
 
 export default function SmartModelRecommender({ generatedPrompt, onSelectModel, defaultExpanded = true }: SmartModelRecommenderProps) {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [prompt, setPrompt] = useState('');
     const [budget, setBudget] = useState<string | undefined>();
     const [loadingAi, setLoadingAi] = useState(false);
 
     const [results, setResults] = useState<HybridResult[] | null>(null);
-    const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+    const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>(() => loadModelCompareSelection());
 
     const compareModels: CompareModel[] = MODELS.map((m) => {
         const capabilities = new Set<string>();
@@ -90,6 +93,10 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
             setPrompt(generatedPrompt);
         }
     }, [generatedPrompt, prompt]); // Added prompt as dependency to satisfy lint
+
+    useEffect(() => {
+        saveModelCompareSelection(selectedCompareIds);
+    }, [selectedCompareIds]);
 
     async function handleAnalyze() {
         if (!prompt.trim()) return;
@@ -338,13 +345,14 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
                                                                 e.stopPropagation();
                                                                 toggleCompare(rec.model.id);
                                                             }}
+                                                            title={selectedCompareIds.includes(rec.model.id) ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                                                             className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
                                                                 selectedCompareIds.includes(rec.model.id)
                                                                     ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
                                                                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                                                             }`}
                                                         >
-                                                            {selectedCompareIds.includes(rec.model.id) ? 'Compared' : 'Compare'}
+                                                            {selectedCompareIds.includes(rec.model.id) ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -388,7 +396,7 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
                                         allModels={compareModels}
                                         selectedModelIds={selectedCompareIds}
                                         onChangeSelected={setSelectedCompareIds}
-                                        title="Compare Recommended Models"
+                                        title={t('modelCompare.recommendedTitle', 'Compare Recommended Models')}
                                     />
                                 </div>
                             ) : (

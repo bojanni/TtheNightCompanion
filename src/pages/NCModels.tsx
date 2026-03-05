@@ -4,6 +4,8 @@ import { API_BASE_URL } from '../lib/constants';
 import { toast } from 'sonner';
 import ModelCompareView, { type CompareModel } from '../components/ModelCompareView';
 import { MODELS } from '../lib/models-data';
+import { loadModelCompareSelection, saveModelCompareSelection } from '../lib/model-compare-storage';
+import { useTranslation } from 'react-i18next';
 
 interface NCModel {
   id: number;
@@ -38,6 +40,7 @@ function StatBar({ label, value }: { label: string, value: number }) {
 }
 
 export default function NCModels() {
+  const { t } = useTranslation();
   const [models, setModels] = useState<NCModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export default function NCModels() {
   // Sort states
   const [sortBy, setSortBy] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>(() => loadModelCompareSelection());
 
   const modelKey = (model: NCModel) => model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -129,6 +132,10 @@ export default function NCModels() {
     };
   }, [searchTerm, typeFilter, costFilter, sortBy, sortOrder, syncTrigger]);
 
+  useEffect(() => {
+    saveModelCompareSelection(selectedCompareIds);
+  }, [selectedCompareIds]);
+
   const handleSync = async () => {
     try {
       setIsSyncing(true);
@@ -164,7 +171,7 @@ export default function NCModels() {
     setSelectedCompareIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= 4) {
-        toast.info('Je kunt maximaal 4 modellen tegelijk vergelijken.');
+        toast.info(t('modelCompare.maxReached', 'You can compare up to 4 models at once.'));
         return prev;
       }
       return [...prev, id];
@@ -367,13 +374,14 @@ export default function NCModels() {
 
                   <button
                     onClick={() => toggleCompare(model)}
+                    title={isSelectedForCompare ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                     className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
                       isSelectedForCompare
                         ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
                         : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
-                    {isSelectedForCompare ? 'Compared' : 'Compare'}
+                    {isSelectedForCompare ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                   </button>
                 </div>
               </div>
@@ -385,7 +393,7 @@ export default function NCModels() {
           allModels={compareModels}
           selectedModelIds={selectedCompareIds}
           onChangeSelected={setSelectedCompareIds}
-          title="Compare NightCafe Models"
+          title={t('modelCompare.nightCafeTitle', 'Compare NightCafe Models')}
         />
         </>
       )}

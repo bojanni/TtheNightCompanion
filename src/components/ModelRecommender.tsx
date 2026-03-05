@@ -10,6 +10,9 @@ import { db } from '../lib/api';
 import { MODELS } from '../lib/models-data';
 import { handleAIError } from '../lib/error-handler';
 import ModelCompareView, { type CompareModel } from './ModelCompareView';
+import { loadModelCompareSelection, saveModelCompareSelection } from '../lib/model-compare-storage';
+import { useTranslation } from 'react-i18next';
+import { useEffect } from 'react';
 
 const BUDGET_OPTIONS = [
   { value: 'low', label: 'Budget', desc: 'Cheap & fast' },
@@ -28,12 +31,17 @@ interface ModelRecommenderProps {
 }
 
 export default function ModelRecommender({ generatedPrompt }: ModelRecommenderProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [budget, setBudget] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ModelRecommendation[] | null>(null);
-  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>(() => loadModelCompareSelection());
+
+  useEffect(() => {
+    saveModelCompareSelection(selectedCompareIds);
+  }, [selectedCompareIds]);
 
   const compareModels: CompareModel[] = MODELS.map((m) => {
     const capabilities = new Set<string>();
@@ -234,13 +242,14 @@ export default function ModelRecommender({ generatedPrompt }: ModelRecommenderPr
                     <div className="mt-2 pt-2 border-t border-slate-800 flex justify-end">
                       <button
                         onClick={() => toggleCompare(rec.modelId)}
+                        title={selectedCompareIds.includes(rec.modelId) ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                         className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
                           selectedCompareIds.includes(rec.modelId)
                             ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
                             : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                         }`}
                       >
-                        {selectedCompareIds.includes(rec.modelId) ? 'Compared' : 'Compare'}
+                        {selectedCompareIds.includes(rec.modelId) ? t('modelCompare.compared', 'Compared') : t('modelCompare.compare', 'Compare')}
                       </button>
                     </div>
                   </div>
@@ -251,7 +260,7 @@ export default function ModelRecommender({ generatedPrompt }: ModelRecommenderPr
                 allModels={compareModels}
                 selectedModelIds={selectedCompareIds}
                 onChangeSelected={setSelectedCompareIds}
-                title="Compare Recommended Models"
+                title={t('modelCompare.recommendedTitle', 'Compare Recommended Models')}
               />
             </div>
           )}

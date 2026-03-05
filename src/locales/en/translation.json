@@ -242,5 +242,27 @@
         "apiKeys": "API Keys",
         "localEndpoints": "Local Endpoints",
         "configuration": "Configuration"
+    },
+    "modelCompare": {
+        "compare": "Compare",
+        "compared": "Compared",
+        "maxReached": "You can compare up to 4 models at once.",
+        "nightCafeTitle": "Compare NightCafe Models",
+        "recommendedTitle": "Compare Recommended Models",
+        "selectRange": "Select {{min}}-{{max}} models to compare.",
+        "reset": "Reset Compare",
+        "exportCsv": "Export CSV",
+        "searchPlaceholder": "Search model to add...",
+        "removeFromCompare": "Remove {{name}} from comparison",
+        "pickAtLeastTwo": "Pick at least 2 models to show the comparison table.",
+        "na": "n/a",
+        "columns": {
+            "name": "Name",
+            "type": "Type",
+            "starRating": "Star Rating",
+            "costRating": "Cost Rating",
+            "dutchDescription": "Dutch Description",
+            "capabilities": "Capabilities"
+        }
     }
 }

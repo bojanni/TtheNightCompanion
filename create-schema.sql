@@ -11,9 +11,13 @@
 -- ============================================================
 
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+DO $$
+BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"';
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS "pgcrypto"';
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS "pg_trgm"';
+END
+$$;
 
 BEGIN;
 
