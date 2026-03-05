@@ -9,6 +9,7 @@ import type { ModelRecommendation } from '../lib/ai-service';
 import { db } from '../lib/api';
 import { MODELS } from '../lib/models-data';
 import { handleAIError } from '../lib/error-handler';
+import ModelCompareView, { type CompareModel } from './ModelCompareView';
 
 const BUDGET_OPTIONS = [
   { value: 'low', label: 'Budget', desc: 'Cheap & fast' },
@@ -32,6 +33,39 @@ export default function ModelRecommender({ generatedPrompt }: ModelRecommenderPr
   const [budget, setBudget] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ModelRecommendation[] | null>(null);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+
+  const compareModels: CompareModel[] = MODELS.map((m) => {
+    const capabilities = new Set<string>();
+    if (m.modelType === 'Image') capabilities.add('image generation');
+    if (m.modelType === 'Edit') capabilities.add('image edit');
+    if (m.modelType === 'Video') capabilities.add('video generation');
+    (m.bestFor || []).forEach((x) => capabilities.add(x));
+    (m.styleTags || []).forEach((x) => capabilities.add(x));
+
+    const avgStar = ((m.artRating || 0) + (m.promptingRating || 0) + (m.realismRating || 0) + (m.typographyRating || 0)) / 4;
+    return {
+      id: m.id,
+      name: m.name,
+      type: m.modelType || 'Image',
+      starRating: avgStar || m.qualityRating || 0,
+      costRating: m.costLevel || 1,
+      descriptionNl: m.description,
+      capabilities: Array.from(capabilities).slice(0, 8),
+    };
+  });
+
+  function toggleCompare(modelId: string) {
+    setSelectedCompareIds((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((x) => x !== modelId);
+      }
+      if (prev.length >= 4) {
+        return prev;
+      }
+      return [...prev, modelId];
+    });
+  }
 
   async function handleRecommend() {
     if (!prompt.trim()) return;
@@ -158,12 +192,23 @@ export default function ModelRecommender({ generatedPrompt }: ModelRecommenderPr
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
+                        {(() => {
+                          const widthClass = rec.matchScore >= 90
+                            ? 'w-full'
+                            : rec.matchScore >= 75
+                              ? 'w-4/5'
+                              : rec.matchScore >= 60
+                                ? 'w-3/5'
+                                : rec.matchScore >= 40
+                                  ? 'w-2/5'
+                                  : 'w-1/5';
+
+                          return (
                         <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all dynamic-width`}
-                            style={{ '--width-percent': `${rec.matchScore}%` } as React.CSSProperties}
-                          />
+                          <div className={`h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all ${widthClass}`} />
                         </div>
+                          );
+                        })()}
                         <span className="text-xs font-medium text-slate-300">{rec.matchScore}%</span>
                       </div>
                     </div>
@@ -185,9 +230,29 @@ export default function ModelRecommender({ generatedPrompt }: ModelRecommenderPr
                         <span className="text-xs font-medium text-teal-400">Recommended NightCafe Preset: {rec.recommendedPreset}</span>
                       </div>
                     )}
+
+                    <div className="mt-2 pt-2 border-t border-slate-800 flex justify-end">
+                      <button
+                        onClick={() => toggleCompare(rec.modelId)}
+                        className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                          selectedCompareIds.includes(rec.modelId)
+                            ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
+                            : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {selectedCompareIds.includes(rec.modelId) ? 'Compared' : 'Compare'}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
+
+              <ModelCompareView
+                allModels={compareModels}
+                selectedModelIds={selectedCompareIds}
+                onChangeSelected={setSelectedCompareIds}
+                title="Compare Recommended Models"
+              />
             </div>
           )}
 

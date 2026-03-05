@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Search, Zap, Filter, ArrowUpDown, Loader2, RefreshCw } from 'lucide-react';
 import { API_BASE_URL } from '../lib/constants';
 import { toast } from 'sonner';
+import ModelCompareView, { type CompareModel } from '../components/ModelCompareView';
+import { MODELS } from '../lib/models-data';
 
 interface NCModel {
   id: number;
@@ -20,16 +22,16 @@ type SortOrder = 'asc' | 'desc';
 type ModelTypeFilter = 'all' | 'Image' | 'Edit' | 'Video';
 
 function StatBar({ label, value }: { label: string, value: number }) {
-  const percentage = (value / 5) * 100;
-
   return (
     <div className="flex items-center gap-2 mt-1">
       <span className="w-16 text-[8px] sm:text-[10px] text-slate-400 font-medium uppercase tracking-wider">{label}</span>
-      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-400"
-          style={{ width: `${percentage}%` }}
-        />
+      <div className="flex-1 flex gap-1">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div
+            key={`${label}-${i}`}
+            className={`h-1.5 flex-1 rounded-full ${i < value ? 'bg-emerald-400' : 'bg-slate-800'}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -50,6 +52,39 @@ export default function NCModels() {
   // Sort states
   const [sortBy, setSortBy] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+
+  const modelKey = (model: NCModel) => model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const toCompareModel = (model: NCModel): CompareModel => {
+    const linked = MODELS.find((m) => m.name === model.name);
+    const caps = new Set<string>();
+
+    if (model.model_type === 'Image') caps.add('image generation');
+    if (model.model_type === 'Edit') caps.add('image edit');
+    if (model.model_type === 'Video') caps.add('video generation');
+    if (model.typography_rating >= 4) caps.add('typography');
+    if (model.realism_rating >= 4) caps.add('realism');
+    if (model.prompting_rating >= 4) caps.add('prompt following');
+    if (model.art_rating >= 4) caps.add('artistic quality');
+
+    (linked?.bestFor || []).forEach((x) => caps.add(x));
+    (linked?.styleTags || []).forEach((x) => caps.add(x));
+
+    const avg = (model.art_rating + model.prompting_rating + model.realism_rating + model.typography_rating) / 4;
+
+    return {
+      id: modelKey(model),
+      name: model.name,
+      type: model.model_type,
+      starRating: avg,
+      costRating: model.cost_level,
+      descriptionNl: model.description,
+      capabilities: Array.from(caps).slice(0, 8),
+    };
+  };
+
+  const compareModels = models.map(toCompareModel);
 
   // Fetch models from API with AbortController to prevent race conditions
   useEffect(() => {
@@ -124,6 +159,18 @@ export default function NCModels() {
   const costStr = (level: number) => '$'.repeat(level);
   const isPro = (level: number) => level >= 4;
 
+  const toggleCompare = (model: NCModel) => {
+    const id = modelKey(model);
+    setSelectedCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 4) {
+        toast.info('Je kunt maximaal 4 modellen tegelijk vergelijken.');
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
       {/* Header */}
@@ -185,6 +232,8 @@ export default function NCModels() {
           <select 
             value={costFilter.max}
             onChange={(e) => setCostFilter({ ...costFilter, max: parseInt(e.target.value) })}
+            title="Filter models by cost"
+            aria-label="Filter models by cost"
             className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500/50"
           >
             <option value={5}>Any</option>
@@ -202,6 +251,8 @@ export default function NCModels() {
           <select 
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortField)}
+            title="Sort models"
+            aria-label="Sort models"
             className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500/50"
           >
             <option value="name">Name</option>
@@ -245,8 +296,12 @@ export default function NCModels() {
 
       {/* Models Grid */}
       {!loading && !error && (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {models.map((model) => (
+          {models.map((model) => {
+            const compareId = modelKey(model);
+            const isSelectedForCompare = selectedCompareIds.includes(compareId);
+            return (
             <div key={model.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-colors group flex flex-col h-full">
               {/* Image Header */}
               <div className="h-32 bg-slate-800 relative overflow-hidden shrink-0">
@@ -309,11 +364,30 @@ export default function NCModels() {
                       {costStr(model.cost_level)}
                     </span>
                   </div>
+
+                  <button
+                    onClick={() => toggleCompare(model)}
+                    className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                      isSelectedForCompare
+                        ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {isSelectedForCompare ? 'Compared' : 'Compare'}
+                  </button>
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
+
+        <ModelCompareView
+          allModels={compareModels}
+          selectedModelIds={selectedCompareIds}
+          onChangeSelected={setSelectedCompareIds}
+          title="Compare NightCafe Models"
+        />
+        </>
       )}
 
       {/* Empty State */}

@@ -3,6 +3,7 @@ import { Compass, Loader2, ChevronDown, ChevronUp, Trophy, Lightbulb, Eraser, Ar
 import { analyzePrompt, getTopCandidates, MODELS, type ModelInfo } from '../lib/models-data';
 import { recommendModels } from '../lib/ai-service';
 import { handleAIError } from '../lib/error-handler';
+import ModelCompareView, { type CompareModel } from './ModelCompareView';
 
 const BUDGET_OPTIONS = [
     { value: 'low', label: 'Budget', desc: 'Cheap & fast' },
@@ -53,6 +54,35 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
     const [loadingAi, setLoadingAi] = useState(false);
 
     const [results, setResults] = useState<HybridResult[] | null>(null);
+    const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+
+    const compareModels: CompareModel[] = MODELS.map((m) => {
+        const capabilities = new Set<string>();
+        if (m.modelType === 'Image') capabilities.add('image generation');
+        if (m.modelType === 'Edit') capabilities.add('image edit');
+        if (m.modelType === 'Video') capabilities.add('video generation');
+        (m.bestFor || []).forEach((x) => capabilities.add(x));
+        (m.styleTags || []).forEach((x) => capabilities.add(x));
+
+        const avgStar = ((m.artRating || 0) + (m.promptingRating || 0) + (m.realismRating || 0) + (m.typographyRating || 0)) / 4;
+        return {
+            id: m.id,
+            name: m.name,
+            type: m.modelType || 'Image',
+            starRating: avgStar || m.qualityRating || 0,
+            costRating: m.costLevel || 1,
+            descriptionNl: m.description,
+            capabilities: Array.from(capabilities).slice(0, 8),
+        };
+    });
+
+    function toggleCompare(modelId: string) {
+        setSelectedCompareIds((prev) => {
+            if (prev.includes(modelId)) return prev.filter((x) => x !== modelId);
+            if (prev.length >= 4) return prev;
+            return [...prev, modelId];
+        });
+    }
 
     // Auto-fill prompt if passed down
     useEffect(() => {
@@ -301,6 +331,22 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
                                                             Suggested Preset: <span className="font-semibold">{rec.recommendedPreset}</span>
                                                         </div>
                                                     )}
+
+                                                    <div className="flex justify-end">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleCompare(rec.model.id);
+                                                            }}
+                                                            className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                                                                selectedCompareIds.includes(rec.model.id)
+                                                                    ? 'bg-teal-500/15 border-teal-500/30 text-teal-300'
+                                                                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                                                            }`}
+                                                        >
+                                                            {selectedCompareIds.includes(rec.model.id) ? 'Compared' : 'Compare'}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 {/* Footer Ratings */}
@@ -337,6 +383,13 @@ export default function SmartModelRecommender({ generatedPrompt, onSelectModel, 
                                             </div>
                                         );
                                     })}
+
+                                    <ModelCompareView
+                                        allModels={compareModels}
+                                        selectedModelIds={selectedCompareIds}
+                                        onChangeSelected={setSelectedCompareIds}
+                                        title="Compare Recommended Models"
+                                    />
                                 </div>
                             ) : (
                                 <div className="text-center py-8 text-slate-500 text-sm border border-slate-800 border-dashed rounded-xl">
