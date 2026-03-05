@@ -20,6 +20,28 @@ import { getPromptDiversityThreshold } from '../lib/user-settings';
 type Mode = 'random' | 'guided' | 'remix' | 'manual';
 
 const STORAGE_KEY = 'nightcompanion_generator_state';
+const GREYLIST_STORAGE_KEY = 'nightcompanion_generator_greylist';
+const DEFAULT_GREYLIST = ['bioluminescent', 'neon-lit', 'cyberpunk', 'cyber', 'jellyfish', 'neon'];
+
+function normalizeGreylist(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => (typeof entry === 'string' ? entry.trim().toLowerCase() : ''))
+    .filter((entry): entry is string => entry.length > 0);
+
+  return Array.from(new Set(normalized));
+}
+
+function readLegacyGreylistFromLocalStorage(): string[] {
+  try {
+    const raw = localStorage.getItem(GREYLIST_STORAGE_KEY);
+    if (!raw) return [];
+    return normalizeGreylist(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
 
 export default function Generator() {
   const { t } = useTranslation();
@@ -67,17 +89,9 @@ export default function Generator() {
   });
 
   // Greylist State
-  const defaultGreylist = ['bioluminescent', 'neon-lit', 'cyberpunk', 'cyber', 'jellyfish', 'neon'];
-  const [greylist, setGreylist] = useState<string[]>(() => {
-    try {
-      const s = localStorage.getItem('nightcompanion_generator_greylist');
-      if (s) {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch { /* ignore */ }
-    return defaultGreylist;
-  });
+  const [greylist, setGreylist] = useState<string[]>(DEFAULT_GREYLIST);
+  const [greylistProfileId, setGreylistProfileId] = useState<string | null>(null);
+  const [greylistPrefsReady, setGreylistPrefsReady] = useState(false);
   const [newGreylistWord, setNewGreylistWord] = useState('');
 
   // NightCafe Preset State
@@ -94,10 +108,109 @@ export default function Generator() {
     localStorage.setItem('nightcompanion_generator_nc_preset', selectedNightCafePreset);
   }, [selectedNightCafePreset]);
 
-  // Persist Greylist
+  // Persist Greylist in user profile metadata (DB).
   useEffect(() => {
-    localStorage.setItem('nightcompanion_generator_greylist', JSON.stringify(greylist));
-  }, [greylist]);
+    if (!greylistPrefsReady || !greylistProfileId) return;
+
+    let cancelled = false;
+    const persistGreylist = async () => {
+      try {
+        const { data: latestRows } = await db
+          .from('user_profiles')
+          .select('id, user_metadata')
+          .eq('id', greylistProfileId)
+          .limit(1);
+
+        const latestProfile = Array.isArray(latestRows) && latestRows.length > 0 ? latestRows[0] : null;
+        if (!latestProfile?.id) return;
+
+        const currentMeta =
+          latestProfile.user_metadata && typeof latestProfile.user_metadata === 'object'
+            ? latestProfile.user_metadata
+            : {};
+
+        const mergedMeta = {
+          ...currentMeta,
+          generator_greylist: normalizeGreylist(greylist),
+        };
+
+        if (!cancelled) {
+          await db.from('user_profiles').update({ user_metadata: mergedMeta }).eq('id', latestProfile.id);
+        }
+      } catch (err) {
+        console.error('Failed to persist generator greylist to DB', err);
+      }
+    };
+
+    void persistGreylist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [greylist, greylistPrefsReady, greylistProfileId]);
+
+  // Load greylist from DB and migrate legacy localStorage value when available.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGreylistPreferences = async () => {
+      const legacyGreylist = readLegacyGreylistFromLocalStorage();
+
+      try {
+        const { data: profileRows, error } = await db
+          .from('user_profiles')
+          .select('id, user_metadata')
+          .limit(1);
+
+        if (error) throw error;
+
+        const profile = Array.isArray(profileRows) && profileRows.length > 0 ? profileRows[0] : null;
+        const profileId = profile?.id ?? null;
+        const profileMeta =
+          profile?.user_metadata && typeof profile.user_metadata === 'object'
+            ? profile.user_metadata
+            : {};
+        const dbGreylist = normalizeGreylist(profileMeta.generator_greylist);
+
+        const resolvedGreylist =
+          dbGreylist.length > 0
+            ? dbGreylist
+            : legacyGreylist.length > 0
+              ? legacyGreylist
+              : DEFAULT_GREYLIST;
+
+        if (!cancelled) {
+          setGreylist(resolvedGreylist);
+          setGreylistProfileId(profileId);
+          setGreylistPrefsReady(true);
+        }
+
+        if (profileId && dbGreylist.length === 0) {
+          const mergedMeta = {
+            ...profileMeta,
+            generator_greylist: resolvedGreylist,
+          };
+          await db.from('user_profiles').update({ user_metadata: mergedMeta }).eq('id', profileId);
+        }
+
+        if (legacyGreylist.length > 0) {
+          localStorage.removeItem(GREYLIST_STORAGE_KEY);
+        }
+      } catch (err) {
+        console.error('Failed to load generator greylist from DB', err);
+        if (!cancelled) {
+          setGreylist(legacyGreylist.length > 0 ? legacyGreylist : DEFAULT_GREYLIST);
+          setGreylistPrefsReady(true);
+        }
+      }
+    };
+
+    void loadGreylistPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleAddGreylistWord() {
     const word = newGreylistWord.trim().toLowerCase();
