@@ -1,10 +1,207 @@
 import { API_BASE_URL } from './constants';
+import { z } from 'zod';
+import type {
+    Character,
+    CharacterDetail,
+    Collection,
+    GalleryItem,
+    ModelUsage,
+    Prompt,
+    PromptTag,
+    PromptVersion,
+    Tag,
+    UserProfile,
+} from './types';
 
 // LOCAL ADAPTER REPLACING API CLIENT
 const API_URL = `${API_BASE_URL}/api`;
+
+type QueryError = {
+    message: string;
+    code: string;
+    details?: string;
+    hint?: string;
+};
+
+type QueryResult<TRow> = {
+    data: TRow[] | null;
+    error: QueryError | null;
+    count?: number;
+};
+
+type QuerySingleResult<TRow> = {
+    data: TRow | null;
+    error: QueryError | null;
+};
+
+type FilterValue = string | number | boolean | null;
+
+type DbTableMap = {
+    prompts: Prompt;
+    tags: Tag;
+    prompt_tags: PromptTag;
+    prompt_versions: PromptVersion;
+    characters: Character;
+    character_details: CharacterDetail;
+    gallery_items: GalleryItem;
+    collections: Collection;
+    model_usage: ModelUsage;
+    user_profiles: UserProfile;
+};
+
+const promptSchema = z.object({
+    id: z.string(),
+    title: z.string().nullable().optional(),
+    content: z.string(),
+    notes: z.string().nullable().optional(),
+    rating: z.number().nullable().optional(),
+    is_template: z.boolean().nullable().optional(),
+    is_favorite: z.boolean().nullable().optional(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    gallery_item_id: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    suggested_model: z.string().nullable().optional(),
+    revised_prompt: z.string().nullable().optional(),
+    seed: z.number().nullable().optional(),
+    aspect_ratio: z.string().nullable().optional(),
+    use_custom_aspect_ratio: z.boolean().nullable().optional(),
+    start_image: z.string().nullable().optional(),
+    generation_journey: z.array(z.object({ step: z.string(), label: z.string() })).nullable().optional(),
+    negative_prompt: z.string().nullable().optional(),
+}).passthrough();
+
+const tagSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    category: z.string().nullable().optional(),
+    created_at: z.string().nullable().optional(),
+}).passthrough();
+
+const promptTagSchema = z.object({
+    prompt_id: z.string(),
+    tag_id: z.string(),
+}).passthrough();
+
+const promptVersionSchema = z.object({
+    id: z.string(),
+    prompt_id: z.string(),
+    content: z.string(),
+    version_number: z.number(),
+    change_description: z.string().nullable().optional(),
+    created_at: z.string(),
+    model: z.string().nullable().optional(),
+}).passthrough();
+
+const characterDetailSchema = z.object({
+    id: z.string(),
+    character_id: z.string(),
+    category: z.string(),
+    detail: z.string(),
+    works_well: z.boolean().nullable().optional(),
+    created_at: z.string().nullable().optional(),
+}).passthrough();
+
+const characterSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    reference_image_url: z.string().nullable().optional(),
+    images: z.array(z.object({ id: z.string(), url: z.string(), isMain: z.boolean(), created_at: z.string() })).nullable().optional(),
+    created_at: z.string(),
+    updated_at: z.string(),
+}).passthrough();
+
+const galleryItemSchema = z.object({
+    id: z.string(),
+    title: z.string().nullable().optional(),
+    image_url: z.string().nullable().optional(),
+    prompt_used: z.string().nullable().optional(),
+    prompt_id: z.string().nullable().optional(),
+    character_id: z.string().nullable().optional(),
+    rating: z.number().nullable().optional(),
+    collection_id: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    created_at: z.string(),
+    updated_at: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    aspect_ratio: z.string().nullable().optional(),
+    start_image: z.string().nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+    media_type: z.enum(['image', 'video']).nullable().optional(),
+    video_url: z.string().nullable().optional(),
+    video_local_path: z.string().nullable().optional(),
+    thumbnail_url: z.string().nullable().optional(),
+    duration_seconds: z.number().nullable().optional(),
+    storage_mode: z.enum(['url', 'local', 'both']).nullable().optional(),
+}).passthrough();
+
+const collectionSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    color: z.string().nullable().optional(),
+    created_at: z.string(),
+}).passthrough();
+
+const modelUsageSchema = z.object({
+    id: z.string(),
+    model_id: z.string().nullable().optional(),
+    prompt_used: z.string().nullable().optional(),
+    category: z.string().nullable().optional(),
+    rating: z.number().nullable().optional(),
+    is_keeper: z.boolean().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    created_at: z.string(),
+}).passthrough();
+
+const userProfileSchema = z.object({
+    id: z.string(),
+    created_at: z.string().nullable().optional(),
+    updated_at: z.string().nullable().optional(),
+}).passthrough();
+
+const TABLE_RESPONSE_SCHEMAS = {
+    prompts: promptSchema,
+    tags: tagSchema,
+    prompt_tags: promptTagSchema,
+    prompt_versions: promptVersionSchema,
+    characters: characterSchema,
+    character_details: characterDetailSchema,
+    gallery_items: galleryItemSchema,
+    collections: collectionSchema,
+    model_usage: modelUsageSchema,
+    user_profiles: userProfileSchema,
+} satisfies Partial<Record<keyof DbTableMap, z.ZodTypeAny>>;
+
+function validateRowsForTable(table: string, rows: unknown[]) {
+    const schema = TABLE_RESPONSE_SCHEMAS[table as keyof DbTableMap];
+    if (!schema) {
+        return { success: true as const, data: rows };
+    }
+
+    const parsed = z.array(schema).safeParse(rows);
+    if (parsed.success) {
+        return { success: true as const, data: parsed.data };
+    }
+
+    const issue = parsed.error.issues[0];
+    return {
+        success: false as const,
+        error: {
+            message: `Schema validation failed for table "${table}"`,
+            code: 'SCHEMA_VALIDATION_ERROR',
+            details: issue ? `${issue.path.join('.') || '<root>'}: ${issue.message}` : parsed.error.message,
+            hint: 'Update frontend table row types or backend response shape to match.',
+        } satisfies QueryError,
+    };
+}
+
 class LocalApiClient {
 
 
+    from<TTable extends keyof DbTableMap>(table: TTable): QueryBuilder<DbTableMap[TTable]>;
+    from(table: string): QueryBuilder<Record<string, unknown>>;
     from(table: string) {
         return new QueryBuilder(table);
     }
@@ -97,17 +294,16 @@ class LocalApiClient {
     }
 }
 
-class QueryBuilder {
+class QueryBuilder<TRow extends object = Record<string, unknown>> {
     table: string;
     url: string;
-    filters: Record<string, string | number | boolean | null> = {};
+    filters: Record<string, FilterValue> = {};
     orderBy: { column: string; ascending: boolean } | null = null;
     limitValue: number | null = null;
     offsetValue: number | null = null;
 
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    body: any = null;
+    body: Record<string, unknown> | Record<string, unknown>[] | null = null;
 
     constructor(table: string) {
         this.table = table;
@@ -125,7 +321,7 @@ class QueryBuilder {
         return this;
     }
 
-    eq(column: string, value: string | number | boolean | null) {
+    eq(column: string, value: FilterValue) {
         if (column === 'user_id') {
             // Ignore user_id filters for local mode
             return this;
@@ -136,28 +332,28 @@ class QueryBuilder {
         return this;
     }
 
-    neq(column: string, value: string | number | boolean | null) {
+    neq(column: string, value: FilterValue) {
         if (column === 'user_id') return this;
         this.filters[column] = `neq.${value}`;
         return this;
     }
 
-    gte(column: string, value: string | number | boolean | null) {
+    gte(column: string, value: FilterValue) {
         this.filters[column] = `gte.${value}`;
         return this;
     }
 
-    gt(column: string, value: string | number | boolean | null) {
+    gt(column: string, value: FilterValue) {
         this.filters[column] = `gt.${value}`;
         return this;
     }
 
-    lte(column: string, value: string | number | boolean | null) {
+    lte(column: string, value: FilterValue) {
         this.filters[column] = `lte.${value}`;
         return this;
     }
 
-    lt(column: string, value: string | number | boolean | null) {
+    lt(column: string, value: FilterValue) {
         this.filters[column] = `lt.${value}`;
         return this;
     }
@@ -199,10 +395,8 @@ class QueryBuilder {
 
     async executeSingle() {
         // Reuse query logic but expect one result
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return new Promise<{ data: any, error: any }>((resolve) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.then((res: any) => {
+        return new Promise<QuerySingleResult<TRow>>((resolve) => {
+            this.then((res: QueryResult<TRow>) => {
                 if (res.error) {
                     resolve({ data: null, error: res.error });
                 } else if (Array.isArray(res.data) && res.data.length > 0) {
@@ -214,8 +408,7 @@ class QueryBuilder {
         });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async then(resolve: (value: any) => void) {
+    async then(resolve: (value: QueryResult<TRow>) => void) {
         try {
             let url = this.url;
             const params = new URLSearchParams();
@@ -286,11 +479,17 @@ class QueryBuilder {
             }
 
             const data = JSON.parse(text);
+            const normalized = Array.isArray(data) ? data : [data];
+            const validation = validateRowsForTable(this.table, normalized);
+
+            if (!validation.success) {
+                return resolve({ data: null, error: validation.error });
+            }
 
             resolve({
-                data: Array.isArray(data) ? data : [data],
+                data: validation.data as TRow[],
                 error: null,
-                count: Array.isArray(data) ? data.length : 1
+                count: validation.data.length,
             });
         } catch (error: unknown) {
             console.error('Query execution error:', error);
@@ -299,36 +498,36 @@ class QueryBuilder {
         }
     }
 
-    insert(data: Record<string, unknown> | Record<string, unknown>[]) {
+    insert(data: Partial<TRow> | Partial<TRow>[]) {
         this.method = 'POST';
         if (Array.isArray(data)) {
             // Strip user_id from each item
             this.body = data.map((item) => {
-                const clean = { ...item };
+                const clean = { ...item } as Record<string, unknown>;
                 delete clean.user_id;
                 return clean;
             });
         } else {
             // Strip user_id
-            const cleanData = { ...data };
+            const cleanData = { ...data } as Record<string, unknown>;
             delete cleanData.user_id;
             this.body = cleanData;
         }
         return this;
     }
 
-    upsert(data: Record<string, unknown> | Record<string, unknown>[], options?: { onConflict: string }) {
+    upsert(data: Partial<TRow> | Partial<TRow>[], options?: { onConflict: string }) {
         this.method = 'POST';
         if (Array.isArray(data)) {
             // Strip user_id from each item
             this.body = data.map((item) => {
-                const clean = { ...item };
+                const clean = { ...item } as Record<string, unknown>;
                 delete clean.user_id;
                 return clean;
             });
         } else {
             // Strip user_id
-            const cleanData = { ...data };
+            const cleanData = { ...data } as Record<string, unknown>;
             delete cleanData.user_id;
             this.body = cleanData;
         }
@@ -344,10 +543,10 @@ class QueryBuilder {
         return this;
     }
 
-    update(data: Record<string, unknown>) {
+    update(data: Partial<TRow>) {
         this.method = 'PUT';
         // Strip user_id
-        const cleanData = { ...data };
+        const cleanData = { ...data } as Record<string, unknown>;
         delete cleanData.user_id;
         this.body = cleanData;
         return this;
@@ -355,5 +554,9 @@ class QueryBuilder {
 
 }
 
+export const dbStrict = new LocalApiClient();
+
+// Backward-compatible export for legacy call sites that still rely on loose typing.
+// Prefer `dbStrict` in new code to get generic typing plus zod-backed response validation.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const db = new LocalApiClient() as any;
+export const db: any = dbStrict;
