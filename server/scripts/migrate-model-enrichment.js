@@ -21,10 +21,20 @@ async function migrate() {
                 hf_likes            INTEGER,
                 hf_tags             TEXT[],
                 last_enriched_at    TIMESTAMP,
+                enriched_at         TIMESTAMP,
+                retry_count         INTEGER DEFAULT 0,
+                next_retry_at       TIMESTAMP,
+                last_error          TEXT,
                 enrichment_status   TEXT DEFAULT 'pending'
                     CHECK (enrichment_status IN ('pending', 'enriched', 'not_on_hf', 'error'))
             );
         `);
+
+        // Backfill compatible columns for existing installations.
+        await pool.query(`ALTER TABLE model_enrichments ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMP`);
+        await pool.query(`ALTER TABLE model_enrichments ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`);
+        await pool.query(`ALTER TABLE model_enrichments ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP`);
+        await pool.query(`ALTER TABLE model_enrichments ADD COLUMN IF NOT EXISTS last_error TEXT`);
 
         console.log('model_enrichments table created (or already exists).');
         console.log('Migration completed successfully.');
