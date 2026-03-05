@@ -426,7 +426,10 @@ export default function Generator() {
                     }`}
                 >
                   <Wand2 size={14} className={autoFillImprove ? "text-teal-400" : ""} />
-                  <span>{t('generator.buttons.autoFill')} {autoFillImprove ? 'ON' : 'OFF'}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span>{t('generator.buttons.autoFill')}</span>
+                    <span className="inline-block w-7 text-left">{autoFillImprove ? 'ON' : 'OFF'}</span>
+                  </span>
                 </button>
                 <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-900 text-slate-200 text-[10px] rounded border border-slate-700 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 delay-150 pointer-events-none z-20 shadow-xl translate-x-1 group-hover:translate-x-0 hidden xl:block">
                   {autoFillImprove ? 'Automatically copies generated prompts to Improve tab' : 'Click to enable auto-copying prompts to Improve tab'}
