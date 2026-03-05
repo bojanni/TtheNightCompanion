@@ -498,6 +498,9 @@ async function initSchema() {
                 UNIQUE(keyword, category)
             );
         `);
+        await addColumn(pool, 'style_keywords', 'count', 'INTEGER DEFAULT 0');
+        await addColumn(pool, 'style_keywords', 'last_seen_at', 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()');
+        await addColumn(pool, 'style_keywords', 'created_at', 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()');
 
         // Style Learning
         await pool.query(`

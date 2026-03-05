@@ -97,7 +97,11 @@ const createCrudRouter = (tableName, searchableColumns = []) => {
 
             if (order) {
                 const [col, dir] = order.split('.');
-                queryText += ` ORDER BY ${col} ${dir === 'desc' ? 'DESC' : 'ASC'}`;
+                if (schema[col]) {
+                    queryText += ` ORDER BY ${col} ${dir === 'desc' ? 'DESC' : 'ASC'}`;
+                } else if (hasCreatedAt) {
+                    queryText += ` ORDER BY created_at DESC`;
+                }
             } else if (hasCreatedAt) {
                 queryText += ` ORDER BY created_at DESC`;
             }

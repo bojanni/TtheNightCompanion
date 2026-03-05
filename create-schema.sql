@@ -251,6 +251,9 @@ CREATE TABLE IF NOT EXISTS style_keywords (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     keyword TEXT,
     category TEXT,
+    count INTEGER DEFAULT 0,
+    last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(keyword, category)
 );
 
