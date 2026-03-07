@@ -239,6 +239,15 @@ function buildMessages(system, user) {
     return messages;
 }
 
+function parseJsonStringSafe(raw) {
+    if (typeof raw !== 'string') return null;
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+}
+
 // Minimal implementation of AI calls using fetch
 async function callOpenAI(apiKey, system, user, maxTokens = 1500, temperature = 1.0, model = 'gpt-4o') {
     const messages = buildMessages(system, user);
@@ -352,49 +361,51 @@ async function callOpenRouter(apiKey, system, user, model, maxTokens = 1500, tem
     });
 
     let res = await sendRequest(!!options.forceJson);
+    let preReadErrorPayload = null;
 
     if (!res.ok && options.forceJson) {
         let retryWithoutJsonMode = false;
-        try {
-            const errorData = await res.json();
-            const errorText = JSON.stringify(errorData).toLowerCase();
-            retryWithoutJsonMode = errorText.includes('response_format') || errorText.includes('json_object') || errorText.includes('not supported');
-        } catch {
-            // ignore
-        }
+        const rawError = await res.text();
+        const parsedError = parseJsonStringSafe(rawError);
+        preReadErrorPayload = parsedError || rawError;
+
+        const normalizedErrorText = (parsedError ? JSON.stringify(parsedError) : rawError).toLowerCase();
+        retryWithoutJsonMode = normalizedErrorText.includes('response_format')
+            || normalizedErrorText.includes('json_object')
+            || normalizedErrorText.includes('not supported');
 
         if (retryWithoutJsonMode) {
             logger.warn(`[OpenRouter] response_format unsupported for model ${model || 'default'}; retrying without forced JSON mode`);
             res = await sendRequest(false);
+            preReadErrorPayload = null;
         }
     }
 
     if (!res.ok) {
         let errorMsg = 'OpenRouter error';
-        try {
-            const errorData = await res.json();
-            logger.error('OpenRouter API Error Details: ' + JSON.stringify(errorData, null, 2));
+        let errorData = preReadErrorPayload;
+        if (errorData === null) {
+            const rawError = await res.text();
+            errorData = parseJsonStringSafe(rawError) || rawError;
+        }
 
-            // OpenRouter errors can be nested in various ways
+        if (typeof errorData === 'object' && errorData !== null) {
+            logger.error('OpenRouter API Error Details: ' + JSON.stringify(errorData, null, 2));
             if (errorData.error && typeof errorData.error === 'object') {
                 errorMsg = errorData.error.message || errorData.error.code || JSON.stringify(errorData.error);
-                // specialized handling for common vague errors
-                if (typeof errorMsg === 'string' && errorMsg.includes('Provider returned error')) {
-                    // Try to dig deeper if possible or just provide a better fallback
-                    if (errorData.error.metadata) {
-                        errorMsg += ` (${JSON.stringify(errorData.error.metadata)})`;
-                    }
+                if (typeof errorMsg === 'string' && errorMsg.includes('Provider returned error') && errorData.error.metadata) {
+                    errorMsg += ` (${JSON.stringify(errorData.error.metadata)})`;
                 }
             } else if (errorData.error && typeof errorData.error === 'string') {
                 errorMsg = errorData.error;
             } else {
                 errorMsg = JSON.stringify(errorData);
             }
-        } catch (e) {
-            const text = await res.text();
-            logger.error('OpenRouter API Error Text: ' + text);
-            errorMsg = text.slice(0, 200); // Limit length
+        } else if (typeof errorData === 'string') {
+            logger.error('OpenRouter API Error Text: ' + errorData);
+            errorMsg = errorData.slice(0, 200);
         }
+
         throw new Error(`OpenRouter Provider Error: ${errorMsg}`);
     }
 
@@ -655,22 +666,24 @@ async function callAI(providerConfig, system, user, maxTokens = 1500, temperatur
                 temperature: temperature
             })
         });
-        const data = await res.json();
+
+        const rawBody = await res.text();
+        const parsedBody = parseJsonStringSafe(rawBody);
+        const data = parsedBody;
 
         if (!res.ok) {
-            const errorText = await res.text();
             let errorMsg = `Local AI Provider Error: ${res.status} ${res.statusText}`;
             try {
-                const errorJson = JSON.parse(errorText);
+                const errorJson = parsedBody || parseJsonStringSafe(rawBody);
                 errorMsg = errorJson.error?.message || errorJson.error || errorMsg;
             } catch (e) {
-                errorMsg += ` - ${errorText.substring(0, 200)}`;
+                errorMsg += ` - ${String(rawBody || '').substring(0, 200)}`;
             }
             throw new Error(errorMsg);
         }
 
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            logger.error('Invalid Local AI response: ' + JSON.stringify(data).substring(0, 500));
+        if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+            logger.error('Invalid Local AI response: ' + String(rawBody || '').substring(0, 500));
             throw new Error('Invalid response format from Local AI Provider: Missing choices/message');
         }
 
