@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { ChevronDown, Terminal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, Database, Save, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { DataManagement } from '../components/DataManagement';
 import {
   getPromptDiversityThreshold,
@@ -24,6 +25,41 @@ export default function Settings() {
   const [apiLogging, setApiLogging] = useState(() => localStorage.getItem('nc_api_logging_enabled') === 'true');
   const [diversityThreshold, setDiversityThreshold] = useState(() => getPromptDiversityThreshold());
   const [backupReminderSettings, setBackupReminderSettingsState] = useState(() => getBackupReminderSettings());
+  const [dbStartupAsk, setDbStartupAsk] = useState(true);
+  const [dbConfigPath, setDbConfigPath] = useState('');
+  const [dbConfigSummary, setDbConfigSummary] = useState('');
+  const [dbConfigBusy, setDbConfigBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDbStartupPreferences() {
+      if (!window.electron?.getDbStartupPreferences) {
+        return;
+      }
+
+      try {
+        const prefs = await window.electron.getDbStartupPreferences();
+        if (cancelled) return;
+
+        setDbStartupAsk(Boolean(prefs.askOnStartup));
+        setDbConfigPath(prefs.configPath || '');
+        const current = prefs.currentConfig;
+        if (current) {
+          setDbConfigSummary(`${current.DB_USER}@${current.DB_HOST}:${current.DB_PORT}/${current.DB_NAME}`);
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error('Failed to load database startup preferences.');
+        }
+      }
+    }
+
+    void loadDbStartupPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleApiLogging = () => {
     const newValue = !apiLogging;
@@ -50,6 +86,43 @@ export default function Settings() {
   const onBackupDayIntervalChange = (value: number) => {
     const saved = setBackupReminderDayInterval(value);
     setBackupReminderSettingsState((prev) => ({ ...prev, everyDays: saved }));
+  };
+
+  const onToggleDbStartupAsk = async () => {
+    if (!window.electron?.setDbAskOnStartup) {
+      toast.error('This option is only available in the desktop app.');
+      return;
+    }
+
+    const nextValue = !dbStartupAsk;
+    setDbStartupAsk(nextValue);
+
+    try {
+      await window.electron.setDbAskOnStartup(nextValue);
+      toast.success(nextValue ? 'Startup database picker enabled.' : 'Startup database picker disabled.');
+    } catch {
+      setDbStartupAsk(!nextValue);
+      toast.error('Failed to save startup database preference.');
+    }
+  };
+
+  const onSaveCurrentDbConfigAs = async () => {
+    if (!window.electron?.saveCurrentDbConfigAs) {
+      toast.error('This option is only available in the desktop app.');
+      return;
+    }
+
+    setDbConfigBusy(true);
+    try {
+      const result = await window.electron.saveCurrentDbConfigAs();
+      if (!result.canceled && result.filePath) {
+        toast.success(`Database config saved to ${result.filePath}`);
+      }
+    } catch {
+      toast.error('Failed to save current database config.');
+    } finally {
+      setDbConfigBusy(false);
+    }
   };
 
   return (
@@ -180,6 +253,44 @@ export default function Settings() {
                       <p className="mt-3 text-xs text-slate-500">
                         Herinnering verschijnt zodra een van beide drempels is bereikt.
                       </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-6 mt-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-cyan-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Database className="w-6 h-6 text-cyan-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-xl font-bold text-white">Database Startup & Config</h2>
+                        <button
+                          onClick={onToggleDbStartupAsk}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${dbStartupAsk ? 'bg-teal-500' : 'bg-slate-700'}`}
+                          title="Ask for database selection at startup"
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${dbStartupAsk ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+
+                      <p className="text-sm text-slate-400 mb-3">
+                        Kies of de app bij opstarten vraagt om een bestaande database-config te openen.
+                      </p>
+
+                      <div className="text-xs text-slate-500 mb-3 break-all">
+                        <div>Config path: {dbConfigPath || 'n/a'}</div>
+                        <div className="mt-1">Current: {dbConfigSummary || 'n/a'}</div>
+                      </div>
+
+                      <button
+                        onClick={onSaveCurrentDbConfigAs}
+                        disabled={dbConfigBusy}
+                        className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Save className="w-4 h-4" />
+                        {dbConfigBusy ? 'Saving...' : 'Save Current DB Config As...'}
+                      </button>
                     </div>
                   </div>
                 </div>
