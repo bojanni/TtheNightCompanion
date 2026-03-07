@@ -11,7 +11,7 @@ export class AbortAIError extends Error {
   }
 }
 
-async function callAI(action: string, payload: Record<string, unknown>, token: string) {
+async function callAI(action: string, payload: Record<string, unknown>, token: string, signal?: AbortSignal) {
   const loggingEnabled = localStorage.getItem('nc_api_logging_enabled') === 'true';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -27,6 +27,7 @@ async function callAI(action: string, payload: Record<string, unknown>, token: s
     method: 'POST',
     headers,
     body: JSON.stringify({ action, payload }),
+    signal,
   });
 
   const data = await res.json();
@@ -99,74 +100,58 @@ function getFallbackResult(action: string, payload: Record<string, unknown>): un
 // Timeout wrapper for AI calls
 async function callAIWithTimeout(action: string, payload: Record<string, unknown>, token: string): Promise<any> {
   const TIMEOUT_MS = 30000; // 30 seconds
-  
-  const performCall = async (): Promise<any> => {
-    while (true) {
-      let timeoutId: number | null = null;
 
-      try {
-        // Create timeout promise
-        const timeoutPromise = new Promise<void>((resolve) => {
-          timeoutId = window.setTimeout(() => {
-            resolve();
-          }, TIMEOUT_MS);
-        });
+  const abortController = new AbortController();
+  const requestStatePromise = callAI(action, payload, token, abortController.signal)
+    .then((value) => ({ status: 'fulfilled' as const, value }))
+    .catch((reason) => ({ status: 'rejected' as const, reason }));
 
-        // Race between API call and timeout
-        const apiCall = callAI(action, payload, token);
-        const result = await Promise.race([
-          apiCall,
-          timeoutPromise.then(() => '__TIMEOUT__' as const)
-        ]);
+  while (true) {
+    let timeoutId: number | null = null;
+    const timeoutPromise = new Promise<'__TIMEOUT__'>((resolve) => {
+      timeoutId = window.setTimeout(() => resolve('__TIMEOUT__'), TIMEOUT_MS);
+    });
 
-        // Clear timeout if API completed first
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
+    const raceResult = await Promise.race([requestStatePromise, timeoutPromise]);
 
-        // Check if timeout occurred
-        if (result === '__TIMEOUT__') {
-          // Timeout occurred, dispatch event to show modal
-          window.dispatchEvent(new CustomEvent('nc-ai-timeout', {
-            detail: { action }
-          }));
-
-          // Wait for user choice
-          const choice = await new Promise<'keep-waiting' | 'skip-ai' | 'abort'>((resolve) => {
-            const handler = (event: Event) => {
-              const customEvent = event as CustomEvent<{ action: string; choice: 'keep-waiting' | 'skip-ai' | 'abort' }>;
-              if (customEvent.detail.action === action) {
-                resolve(customEvent.detail.choice);
-                window.removeEventListener('nc-timeout-choice', handler);
-              }
-            };
-            window.addEventListener('nc-timeout-choice', handler);
-          });
-
-          if (choice === 'keep-waiting') {
-            // Continue the loop to wait another 30 seconds
-            continue;
-          } else if (choice === 'skip-ai') {
-            return getFallbackResult(action, payload);
-          } else {
-            // abort
-            throw new AbortAIError();
-          }
-        } else {
-          // API call completed successfully
-          return result;
-        }
-      } catch (error) {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-        }
-        throw error;
-      }
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
     }
-  };
 
-  return performCall();
+    if (raceResult !== '__TIMEOUT__') {
+      if (raceResult.status === 'fulfilled') {
+        return raceResult.value;
+      }
+      throw raceResult.reason;
+    }
+
+    window.dispatchEvent(new CustomEvent('nc-ai-timeout', {
+      detail: { action }
+    }));
+
+    const choice = await new Promise<'keep-waiting' | 'skip-ai' | 'abort'>((resolve) => {
+      const handler = (event: Event) => {
+        const customEvent = event as CustomEvent<{ action: string; choice: 'keep-waiting' | 'skip-ai' | 'abort' }>;
+        if (customEvent.detail.action === action) {
+          resolve(customEvent.detail.choice);
+          window.removeEventListener('nc-timeout-choice', handler);
+        }
+      };
+      window.addEventListener('nc-timeout-choice', handler);
+    });
+
+    if (choice === 'keep-waiting') {
+      continue;
+    }
+
+    abortController.abort();
+    if (choice === 'skip-ai') {
+      return getFallbackResult(action, payload);
+    }
+
+    throw new AbortAIError();
+  }
 }
 
 export function taskModelToPreferences(taskModel?: string): ApiPreferences | undefined {

@@ -8,7 +8,7 @@ import {
 import { toast } from 'sonner';
 import { diffWords } from '../lib/diff-utils';
 import { handleAIError } from '../lib/error-handler';
-import { improvePromptWithNegative, analyzeStyle, generateFromDescription, diagnosePrompt, optimizePromptForModel, triggerKeywordExtraction, taskModelToPreferences } from '../lib/ai-service';
+import { improvePrompt, improvePromptWithNegative, analyzeStyle, generateFromDescription, diagnosePrompt, optimizePromptForModel, triggerKeywordExtraction, taskModelToPreferences } from '../lib/ai-service';
 import { analyzePrompt, supportsNegativePrompt } from '../lib/models-data';
 import { recommendNCModel } from '../lib/nc-model-recommender';
 import type { StyleAnalysis, Diagnosis, GeneratePreferences } from '../lib/ai-service';
@@ -233,10 +233,16 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         setNegativeResult(result.negativePrompt || '');
       } else {
         const tips = useModelTips ? modelTips : undefined;
-        const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, effectivePrefs, taskImproveModel, tips);
-        const improvedText = result.improved || result.optimizedPrompt || result.prompt || result.raw || (typeof result === 'string' ? result : '');
-        setImproveResult(improvedText);
-        setNegativeResult(result.negativePrompt || '');
+        if (negativeInput.trim()) {
+          const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, effectivePrefs, taskImproveModel, tips);
+          const improvedText = result.improved || result.optimizedPrompt || result.prompt || result.raw || (typeof result === 'string' ? result : '');
+          setImproveResult(improvedText);
+          setNegativeResult(result.negativePrompt || '');
+        } else {
+          const improved = await improvePrompt(improveInput, token, effectivePrefs, taskImproveModel, tips);
+          setImproveResult(typeof improved === 'string' ? improved : String(improved ?? ''));
+          setNegativeResult('');
+        }
       }
     } catch (e) { handleAIError(e); } finally { setLoading(false); }
   }
