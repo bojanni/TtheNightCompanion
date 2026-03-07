@@ -23,6 +23,7 @@ import UsageDashboard from './pages/UsageDashboard';
 import ModelEnrichmentManager from './pages/ModelEnrichmentManager';
 
 import { ExtensionProvider } from './context/ExtensionContext';
+import { AITimeoutProvider } from './context/AITimeoutContext';
 
 export default function App() {
   return (
@@ -30,9 +31,11 @@ export default function App() {
       <Routes>
         <Route element={
           <ErrorBoundary>
-            <ExtensionProvider>
-              <Layout />
-            </ExtensionProvider>
+            <AITimeoutProvider>
+              <ExtensionProvider>
+                <Layout />
+              </ExtensionProvider>
+            </AITimeoutProvider>
           </ErrorBoundary>
         }>
           <Route path="/" element={<Dashboard />} />

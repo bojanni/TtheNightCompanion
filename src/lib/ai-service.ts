@@ -3,6 +3,22 @@ import { db } from './api';
 
 const API_URL = `${API_BASE_URL}/api/ai`;
 
+// Custom error for when user chooses to skip AI
+export class SkipAIError extends Error {
+  constructor() {
+    super('User chose to generate without AI');
+    this.name = 'SkipAIError';
+  }
+}
+
+// Custom error for user abort
+export class AbortAIError extends Error {
+  constructor() {
+    super('User aborted AI generation');
+    this.name = 'AbortAIError';
+  }
+}
+
 async function callAI(action: string, payload: Record<string, unknown>, token: string) {
   const loggingEnabled = localStorage.getItem('nc_api_logging_enabled') === 'true';
   const headers: Record<string, string> = {
@@ -69,6 +85,81 @@ async function callAI(action: string, payload: Record<string, unknown>, token: s
   return data.result;
 }
 
+// Timeout wrapper for AI calls
+async function callAIWithTimeout(action: string, payload: Record<string, unknown>, token: string): Promise<any> {
+  const TIMEOUT_MS = 30000; // 30 seconds
+  let timeoutId: number | null = null;
+  let abortController: AbortController | null = null;
+  
+  const performCall = async (): Promise<any> => {
+    while (true) {
+      try {
+        // Create a promise that resolves when user makes a choice
+        const userChoicePromise = new Promise<'keep-waiting' | 'skip-ai' | 'abort'>((resolve) => {
+          const handler = (event: CustomEvent) => {
+            if (event.detail.action === action) {
+              resolve(event.detail.choice);
+              window.removeEventListener('nc-timeout-choice' as any, handler);
+            }
+          };
+          window.addEventListener('nc-timeout-choice' as any, handler);
+        });
+
+        // Create timeout promise
+        const timeoutPromise = new Promise<'timeout'>((resolve) => {
+          timeoutId = window.setTimeout(() => {
+            resolve('timeout');
+          }, TIMEOUT_MS);
+        });
+
+        // Race between API call and timeout
+        const apiCall = callAI(action, payload, token);
+        const result = await Promise.race([apiCall, timeoutPromise]);
+
+        if (result === 'timeout') {
+          // Timeout occurred, dispatch event to show modal
+          window.dispatchEvent(new CustomEvent('nc-ai-timeout', {
+            detail: { action }
+          }));
+
+          // Wait for user choice
+          const choice = await userChoicePromise;
+          
+          if (timeoutId !== null) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+
+          if (choice === 'keep-waiting') {
+            // Continue the loop to wait another 30 seconds
+            continue;
+          } else if (choice === 'skip-ai') {
+            throw new SkipAIError();
+          } else {
+            // abort
+            throw new AbortAIError();
+          }
+        } else {
+          // API call completed successfully
+          if (timeoutId !== null) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          return result;
+        }
+      } catch (error) {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        throw error;
+      }
+    }
+  };
+
+  return performCall();
+}
+
 export function taskModelToPreferences(taskModel?: string): ApiPreferences | undefined {
   if (!taskModel) return undefined;
   const sepIdx = taskModel.indexOf(':');
@@ -81,12 +172,12 @@ export async function improvePrompt(prompt: string, token: string, apiPreference
   const prefs = taskModelToPreferences(taskModel) ?? apiPreferences;
   if (prefs) payload.apiPreferences = prefs;
   if (modelTips && modelTips.length > 0) payload.modelTips = modelTips;
-  return callAI('improve', payload, token);
+  return callAIWithTimeout('improve', payload, token);
 }
 
 export async function extractKeywords(prompt: string, token: string): Promise<string[]> {
   try {
-    const rawResult = await callAI('extract-keywords', { prompt }, token);
+    const rawResult = await callAIWithTimeout('extract-keywords', { prompt }, token);
     
     if (typeof rawResult === 'string') {
       // In case the AI returns a markdown block like ```json ["word"] ```
@@ -128,7 +219,7 @@ export async function improvePromptWithNegative(
   const prefs = taskModelToPreferences(taskModel) ?? apiPreferences;
   if (prefs) payload.apiPreferences = prefs;
   if (modelTips && modelTips.length > 0) payload.modelTips = modelTips;
-  const result = await callAI('improve-with-negative', payload, token) as unknown;
+  const result = await callAIWithTimeout('improve-with-negative', payload, token) as unknown;
 
   if (result && typeof result === 'object' && 'improved' in result && 'negativePrompt' in result) {
     return {
@@ -203,7 +294,7 @@ export async function improvePromptDetailed(
   if (apiPreferences) {
     payload.apiPreferences = apiPreferences;
   }
-  return callAI('improve-detailed', payload, token);
+  return callAIWithTimeout('improve-detailed', payload, token);
 }
 
 export interface StyleAnalysis {
@@ -215,7 +306,7 @@ export interface StyleAnalysis {
 }
 
 export async function analyzeStyle(prompts: string[], token: string): Promise<StyleAnalysis> {
-  return callAI('analyze-style', { prompts }, token);
+  return callAIWithTimeout('analyze-style', { prompts }, token);
 }
 
 export interface GeneratePreferences {
@@ -246,18 +337,18 @@ export async function generateFromDescription(
   };
   const prefs = taskModelToPreferences(options.taskModel);
   if (prefs) payload.apiPreferences = prefs;
-  return callAI('generate', payload, token);
+  return callAIWithTimeout('generate', payload, token);
 }
 
 export async function generateRandomPromptAI(token: string, theme?: string, maxWords?: number, greylist?: string[], creativity?: 'focused' | 'balanced' | 'wild', recentPrompts?: string[], taskModel?: string): Promise<{ prompt: string; negativePrompt?: string; style?: string }> {
   const payload: Record<string, unknown> = { theme, maxWords, greylist, creativity, recentPrompts };
   const prefs = taskModelToPreferences(taskModel);
   if (prefs) payload.apiPreferences = prefs;
-  return callAI('random', payload, token);
+  return callAIWithTimeout('random', payload, token);
 }
 
 export async function generateNegativePrompt(token: string): Promise<string> {
-  return callAI('generate-negative-prompt', {}, token);
+  return callAIWithTimeout('generate-negative-prompt', {}, token);
 }
 
 export interface Diagnosis {
@@ -267,7 +358,7 @@ export interface Diagnosis {
 }
 
 export async function diagnosePrompt(prompt: string, issue: string, token: string): Promise<Diagnosis> {
-  return callAI('diagnose', { prompt, issue }, token);
+  return callAIWithTimeout('diagnose', { prompt, issue }, token);
 }
 
 export interface ModelRecommendation {
@@ -288,7 +379,7 @@ export async function recommendModels(
   options?: { budget?: string; style?: string; candidates?: { id: string; name: string; score: number }[] },
   token?: string
 ): Promise<RecommendModelsResult> {
-  return callAI('recommend-models', {
+  return callAIWithTimeout('recommend-models', {
     prompt,
     budget: options?.budget,
     style: options?.style,
@@ -314,7 +405,7 @@ export async function analyzeImage(
   promptUsed: string | undefined,
   token: string
 ): Promise<ImageAnalysisResult> {
-  return callAI('analyze-image', {
+  return callAIWithTimeout('analyze-image', {
     imageUrl: image.imageUrl,
     imageBase64: image.imageBase64,
     imageMimeType: image.imageMimeType,
@@ -358,7 +449,7 @@ export async function batchAnalyzeImages(
   promptUsed: string | undefined,
   token: string
 ): Promise<BatchAnalysisResult> {
-  return callAI('batch-analyze', { images, promptUsed }, token);
+  return callAIWithTimeout('batch-analyze', { images, promptUsed }, token);
 }
 
 export interface PromptVariation {
@@ -373,11 +464,11 @@ export async function generatePromptVariations(
   count: number = 5,
   strategy: string = 'mixed'
 ): Promise<PromptVariation[]> {
-  return callAI('generate-variations', { basePrompt, count, strategy }, token);
+  return callAIWithTimeout('generate-variations', { basePrompt, count, strategy }, token);
 }
 
 export async function testConnection(token: string): Promise<string> {
-  return callAI('test-connection', {}, token);
+  return callAIWithTimeout('test-connection', {}, token);
 }
 
 export interface CharacterDescriptionResult {
@@ -391,7 +482,7 @@ export async function describeCharacter(
   override: boolean,
   token: string
 ): Promise<CharacterDescriptionResult | string> {
-  return callAI('describe-character', { imageUrl, override }, token);
+  return callAIWithTimeout('describe-character', { imageUrl, override }, token);
 }
 
 export function resizeImageToBase64(file: File, maxSize = 1024): Promise<{ data: string; mimeType: string }> {
@@ -425,11 +516,11 @@ export function resizeImageToBase64(file: File, maxSize = 1024): Promise<{ data:
 }
 
 export async function generateTitle(prompt: string, token: string): Promise<string> {
-  return callAI('generate-title', { prompt }, token);
+  return callAIWithTimeout('generate-title', { prompt }, token);
 }
 
 export async function suggestTags(prompt: string, token: string): Promise<string> {
-  return callAI('suggest-tags', { prompt }, token);
+  return callAIWithTimeout('suggest-tags', { prompt }, token);
 }
 
 export async function optimizePromptForModel(
@@ -441,7 +532,7 @@ export async function optimizePromptForModel(
 ): Promise<{ optimizedPrompt: string; negativePrompt?: string }> {
   const payload: Record<string, unknown> = { prompt, targetModel, negativePrompt };
   if (apiPreferences) payload.apiPreferences = apiPreferences;
-  return callAI('optimize-for-model', payload, token);
+  return callAIWithTimeout('optimize-for-model', payload, token);
 }
 
 export interface ModelListItem {
@@ -468,7 +559,7 @@ export async function listModels(
   if (apiKey) payload.apiKey = apiKey;
   if (endpointUrl) payload.endpointUrl = endpointUrl;
 
-  return callAI('list-models', payload, token);
+  return callAIWithTimeout('list-models', payload, token);
 }
 
 export function triggerKeywordExtraction(promptId: string, content: string, token: string = '') {
