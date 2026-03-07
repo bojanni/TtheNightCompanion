@@ -8,7 +8,7 @@ import {
 import { toast } from 'sonner';
 import { diffWords } from '../lib/diff-utils';
 import { handleAIError } from '../lib/error-handler';
-import { improvePromptWithNegative, analyzeStyle, generateFromDescription, diagnosePrompt, optimizePromptForModel, triggerKeywordExtraction } from '../lib/ai-service';
+import { improvePromptWithNegative, analyzeStyle, generateFromDescription, diagnosePrompt, optimizePromptForModel, triggerKeywordExtraction, taskModelToPreferences } from '../lib/ai-service';
 import { analyzePrompt, supportsNegativePrompt } from '../lib/models-data';
 import { recommendNCModel } from '../lib/nc-model-recommender';
 import type { StyleAnalysis, Diagnosis, GeneratePreferences } from '../lib/ai-service';
@@ -223,14 +223,17 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         if (saved) apiPreferences = JSON.parse(saved);
       } catch (e) { }
 
+      // Always prioritize the selected task model from Settings/Task Models.
+      const effectivePrefs = taskModelToPreferences(taskImproveModel) ?? apiPreferences;
+
       if (!supportsNegativePrompt(suggestedModel?.id || '')) {
-        const result: any = await optimizePromptForModel(improveInput, suggestedModel?.name ?? 'DALL-E 3', token, negativeInput, apiPreferences);
+        const result: any = await optimizePromptForModel(improveInput, suggestedModel?.name ?? 'DALL-E 3', token, negativeInput, effectivePrefs);
         const improvedText = result.optimizedPrompt || result.improved || result.prompt || result.raw || (typeof result === 'string' ? result : '');
         setImproveResult(improvedText);
         setNegativeResult(result.negativePrompt || '');
       } else {
         const tips = useModelTips ? modelTips : undefined;
-        const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, apiPreferences, taskImproveModel, tips);
+        const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, effectivePrefs, taskImproveModel, tips);
         const improvedText = result.improved || result.optimizedPrompt || result.prompt || result.raw || (typeof result === 'string' ? result : '');
         setImproveResult(improvedText);
         setNegativeResult(result.negativePrompt || '');
