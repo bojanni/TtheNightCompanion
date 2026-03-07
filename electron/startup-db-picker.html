@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NightCompanion Startup</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --card: rgba(15, 23, 42, 0.85);
+      --card-border: rgba(51, 65, 85, 0.65);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --teal: #14b8a6;
+      --teal-soft: rgba(20, 184, 166, 0.15);
+      --indigo: #6366f1;
+      --indigo-soft: rgba(99, 102, 241, 0.15);
+      --amber: #f59e0b;
+      --amber-soft: rgba(245, 158, 11, 0.15);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(1200px 600px at -20% -40%, rgba(20, 184, 166, 0.18), transparent 45%),
+        radial-gradient(900px 500px at 120% 130%, rgba(99, 102, 241, 0.14), transparent 42%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 520px;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      background: var(--card);
+      backdrop-filter: blur(8px);
+      padding: 20px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--teal);
+      box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.2);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: 0.02em;
+    }
+
+    .desc {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .meta {
+      margin-bottom: 14px;
+      border: 1px solid var(--card-border);
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .meta-label {
+      color: var(--muted);
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .meta-value {
+      word-break: break-word;
+      color: #cbd5e1;
+    }
+
+    .buttons {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text);
+      transition: 150ms ease;
+      text-align: left;
+    }
+
+    .btn-current {
+      background: var(--teal-soft);
+      border-color: rgba(20, 184, 166, 0.35);
+    }
+
+    .btn-existing {
+      background: var(--indigo-soft);
+      border-color: rgba(99, 102, 241, 0.35);
+    }
+
+    .btn-defaults {
+      background: var(--amber-soft);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+    }
+
+    .inline-status {
+      margin-top: 10px;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .checkbox-row {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #cbd5e1;
+      font-size: 0.86rem;
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--teal);
+      width: 14px;
+      height: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="title-row">
+      <span class="dot"></span>
+      <h1>NightCompanion Startup Database</h1>
+    </div>
+    <p class="desc">Choose which database configuration to use for this launch.</p>
+
+    <section class="meta">
+      <span class="meta-label">Current</span>
+      <div id="current-summary" class="meta-value">Loading...</div>
+      <span class="meta-label" style="margin-top:10px;">Config path</span>
+      <div id="config-path" class="meta-value">Loading...</div>
+    </section>
+
+    <section class="buttons">
+      <button id="btn-current" class="btn-current">Use Current</button>
+      <button id="btn-existing" class="btn-existing">Open Existing DB Config...</button>
+      <button id="btn-defaults" class="btn-defaults">Use Defaults</button>
+    </section>
+
+    <div id="status" class="inline-status"></div>
+
+    <label class="checkbox-row">
+      <input id="dont-ask" type="checkbox" />
+      Do not ask again on startup
+    </label>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('status');
+    const dontAskEl = $('dont-ask');
+
+    function setStatus(text, isError = false) {
+      statusEl.textContent = text || '';
+      statusEl.style.color = isError ? '#fca5a5' : '#94a3b8';
+    }
+
+    async function init() {
+      try {
+        const data = await window.startupDb.getData();
+        $('current-summary').textContent = data.summary || 'n/a';
+        $('config-path').textContent = data.configPath || 'n/a';
+      } catch (err) {
+        $('current-summary').textContent = 'n/a';
+        $('config-path').textContent = 'n/a';
+        setStatus('Failed to load startup data.', true);
+      }
+    }
+
+    $('btn-current').addEventListener('click', () => {
+      window.startupDb.useCurrent(dontAskEl.checked);
+    });
+
+    $('btn-defaults').addEventListener('click', () => {
+      window.startupDb.useDefaults(dontAskEl.checked);
+    });
+
+    $('btn-existing').addEventListener('click', async () => {
+      setStatus('Opening file picker...');
+      try {
+        const result = await window.startupDb.openExisting();
+        if (!result || result.canceled) {
+          setStatus('No file selected.');
+          return;
+        }
+
+        if (!result.ok) {
+          setStatus(result.error || 'Could not load selected file.', true);
+          return;
+        }
+
+        setStatus(`Selected: ${result.summary}`);
+        window.startupDb.confirmOpenExisting(result.config, dontAskEl.checked);
+      } catch (err) {
+        setStatus('Failed to open existing config.', true);
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

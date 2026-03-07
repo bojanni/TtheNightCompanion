@@ -10,6 +10,7 @@ if (app && app.commandLine) {
 
 let mainWindow;
 let serverProcess;
+let startupDbWindow;
 
 const DEFAULT_DB_CONFIG = {
     DB_USER: 'postgres',
@@ -153,6 +154,34 @@ async function resolveStartupDbConfig() {
         return current;
     }
 
+    try {
+        const selection = await showStartupDbPickerWindow({
+            configPath: getPersistedDbConfigPath(),
+            currentConfig: persisted || DEFAULT_DB_CONFIG,
+        });
+
+        if (selection.dontAskAgain) {
+            saveStartupSettings({ askDbOnStartup: false });
+        }
+
+        if (selection.type === 'open-existing' && selection.config) {
+            const selectedConfig = sanitizeDbConfig(selection.config);
+            savePersistedDbConfig(selectedConfig);
+            return selectedConfig;
+        }
+
+        if (selection.type === 'defaults') {
+            savePersistedDbConfig(DEFAULT_DB_CONFIG);
+            return { ...DEFAULT_DB_CONFIG };
+        }
+
+        const resolvedCurrent = persisted || { ...DEFAULT_DB_CONFIG };
+        savePersistedDbConfig(resolvedCurrent);
+        return resolvedCurrent;
+    } catch (error) {
+        console.warn('Falling back to native startup DB dialog due to picker error.', error);
+    }
+
     const detailLines = [
         `Config location: ${getPersistedDbConfigPath()}`,
         persisted
@@ -211,6 +240,128 @@ async function resolveStartupDbConfig() {
     const resolved = persisted || { ...DEFAULT_DB_CONFIG };
     savePersistedDbConfig(resolved);
     return resolved;
+}
+
+function showStartupDbPickerWindow({ configPath, currentConfig }) {
+    return new Promise((resolve) => {
+        let resolved = false;
+        let cachedOpenExistingConfig = null;
+        const summary = `${currentConfig.DB_USER}@${currentConfig.DB_HOST}:${currentConfig.DB_PORT}/${currentConfig.DB_NAME}`;
+
+        const cleanup = () => {
+            ipcMain.removeHandler('startup-db:get-data');
+            ipcMain.removeHandler('startup-db:open-existing');
+            ipcMain.removeListener('startup-db:use-current', onUseCurrent);
+            ipcMain.removeListener('startup-db:use-defaults', onUseDefaults);
+            ipcMain.removeListener('startup-db:confirm-open-existing', onConfirmOpenExisting);
+        };
+
+        const resolveOnce = (value) => {
+            if (resolved) return;
+            resolved = true;
+            cleanup();
+            if (startupDbWindow && !startupDbWindow.isDestroyed()) {
+                startupDbWindow.close();
+            }
+            startupDbWindow = null;
+            resolve(value);
+        };
+
+        const onUseCurrent = (event, payload) => {
+            resolveOnce({ type: 'current', dontAskAgain: Boolean(payload?.dontAskAgain) });
+        };
+
+        const onUseDefaults = (event, payload) => {
+            resolveOnce({ type: 'defaults', dontAskAgain: Boolean(payload?.dontAskAgain) });
+        };
+
+        const onConfirmOpenExisting = (event, payload) => {
+            const config = payload?.config || cachedOpenExistingConfig;
+            if (!config) {
+                return;
+            }
+            resolveOnce({
+                type: 'open-existing',
+                dontAskAgain: Boolean(payload?.dontAskAgain),
+                config,
+            });
+        };
+
+        ipcMain.handle('startup-db:get-data', async () => ({
+            configPath,
+            summary,
+        }));
+
+        ipcMain.handle('startup-db:open-existing', async () => {
+            const pick = await dialog.showOpenDialog({
+                title: 'Open Existing Database Config',
+                properties: ['openFile'],
+                filters: [
+                    { name: 'Config files', extensions: ['json', 'env'] },
+                    { name: 'All files', extensions: ['*'] },
+                ],
+            });
+
+            if (pick.canceled || pick.filePaths.length === 0) {
+                return { ok: false, canceled: true };
+            }
+
+            try {
+                const selectedConfig = loadDbConfigFromFile(pick.filePaths[0]);
+                cachedOpenExistingConfig = selectedConfig;
+                return {
+                    ok: true,
+                    canceled: false,
+                    filePath: pick.filePaths[0],
+                    summary: `${selectedConfig.DB_USER}@${selectedConfig.DB_HOST}:${selectedConfig.DB_PORT}/${selectedConfig.DB_NAME}`,
+                    config: selectedConfig,
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    canceled: false,
+                    error: error && error.message ? error.message : String(error),
+                };
+            }
+        });
+
+        ipcMain.on('startup-db:use-current', onUseCurrent);
+        ipcMain.on('startup-db:use-defaults', onUseDefaults);
+        ipcMain.on('startup-db:confirm-open-existing', onConfirmOpenExisting);
+
+        startupDbWindow = new BrowserWindow({
+            width: 560,
+            height: 420,
+            resizable: false,
+            minimizable: false,
+            maximizable: false,
+            show: false,
+            title: 'NightCompanion Startup',
+            backgroundColor: '#020617',
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'startup-db-preload.js'),
+            },
+        });
+
+        startupDbWindow.once('ready-to-show', () => {
+            if (startupDbWindow && !startupDbWindow.isDestroyed()) {
+                startupDbWindow.show();
+            }
+        });
+
+        startupDbWindow.on('closed', () => {
+            if (!resolved) {
+                resolveOnce({ type: 'current', dontAskAgain: false });
+            }
+        });
+
+        startupDbWindow.loadFile(path.join(__dirname, 'startup-db-picker.html')).catch((err) => {
+            console.error('Failed to load startup DB picker window:', err);
+            resolveOnce({ type: 'current', dontAskAgain: false });
+        });
+    });
 }
 
 function createWindow() {
