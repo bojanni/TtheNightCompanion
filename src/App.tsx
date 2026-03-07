@@ -13,7 +13,6 @@ import AIConfig from './pages/AIConfig';
 import StyleProfile from './pages/StyleProfile';
 import NCModels from './pages/NCModels';
 import BatchTesting from './pages/BatchTesting';
-import VersioningGuide from './pages/VersioningGuide';
 import Tools from './pages/Tools';
 import Timeline from './pages/Timeline';
 import Statistics from './pages/Statistics';
@@ -47,7 +46,6 @@ export default function App() {
           <Route path="/nc-models" element={<NCModels />} />
           <Route path="/batch-testing" element={<BatchTesting />} />
           <Route path="/style" element={<StyleProfile />} />
-          <Route path="/versioning-guide" element={<VersioningGuide />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/ai-config" element={<AIConfig />} />
           <Route path="/tools" element={<Tools />} />

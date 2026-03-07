@@ -34,7 +34,10 @@ Endpoints:
 
 ### 3. Database Migration
 
-**Location:** [`supabase/migrations/20260208214700_add_encryption_fields.sql`](file:///c:/Users/bojan/OneDrive/Documenten/GitHub/NightCompanion/supabase/migrations/20260208214700_add_encryption_fields.sql)
+**Location:** `server/migrations/`
+
+The app now uses local PostgreSQL migrations managed by the server migration runner.
+Encryption-related schema changes are part of the current local schema.
 
 Added columns to `user_api_keys`:
 

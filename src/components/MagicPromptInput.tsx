@@ -4,7 +4,7 @@ import { generateFromDescription } from '../lib/ai-service';
 import { toast } from 'sonner';
 import CharacterPicker from './CharacterPicker';
 import { useCharacters } from '../hooks/useCharacters';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/api';
 
 interface MagicPromptInputProps {
     onGenerate: (prompt: string, negativePrompt?: string) => void;
@@ -34,7 +34,7 @@ export default function MagicPromptInput({ onGenerate, maxWords, className, grey
                 const token = '';
 
                 // Get successful prompts for better generation context
-                const { data } = await supabase.from('prompts').select('content').limit(5);
+                const { data } = await db.from('prompts').select('content').limit(5);
                 const recentPrompts = data?.map((p: { content: string }) => p.content) || [];
 
                 const result = await generateFromDescription(
