@@ -119,6 +119,19 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
 
   async function fetchActiveModel() {
     try {
+      const { data: localData } = await db
+        .from('user_local_endpoints')
+        .select('*')
+        .eq('is_active_improve', true)
+        .maybeSingle();
+
+      if (localData) {
+        const modelName = localData.model_improve || localData.model_name;
+        setActiveModel(`${localData.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${modelName})`);
+        setActiveImproveTaskModel(`${localData.provider}:${modelName}`);
+        return;
+      }
+
       const keys = await listApiKeys();
       const activeKey = keys.find(k => k.is_active_improve) ?? keys.find(k => k.is_active);
 
@@ -127,19 +140,6 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         const providerName = activeKey.provider.charAt(0).toUpperCase() + activeKey.provider.slice(1);
         setActiveModel(`${providerName} ${model}`);
         setActiveImproveTaskModel(`${activeKey.provider}:${model}`);
-        return;
-      }
-
-      const { data: localData } = await db
-        .from('user_local_endpoints')
-        .select('*')
-        .eq('is_active_improve', true)
-        .single();
-
-      if (localData) {
-        const modelName = localData.model_improve || localData.model_name;
-        setActiveModel(`${localData.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${modelName})`);
-        setActiveImproveTaskModel(`${localData.provider}:${modelName}`);
         return;
       }
 
@@ -228,34 +228,8 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         if (saved) apiPreferences = JSON.parse(saved);
       } catch (e) { }
 
-      // Always resolve the truly active Improve model from Settings at request time.
-      let resolvedActiveTaskModel = activeImproveTaskModel;
-      try {
-        const keys = await listApiKeys();
-        const activeKey = keys.find(k => k.is_active_improve) ?? keys.find(k => k.is_active);
-        if (activeKey) {
-          const model = activeKey.model_improve || activeKey.model_name || getDefaultModelForProvider(activeKey.provider);
-          resolvedActiveTaskModel = `${activeKey.provider}:${model}`;
-          setActiveImproveTaskModel(resolvedActiveTaskModel);
-          setActiveModel(`${activeKey.provider.charAt(0).toUpperCase() + activeKey.provider.slice(1)} ${model}`);
-        } else {
-          const { data: localData } = await db
-            .from('user_local_endpoints')
-            .select('*')
-            .eq('is_active_improve', true)
-            .maybeSingle();
-          if (localData) {
-            const modelName = localData.model_improve || localData.model_name;
-            resolvedActiveTaskModel = `${localData.provider}:${modelName}`;
-            setActiveImproveTaskModel(resolvedActiveTaskModel);
-            setActiveModel(`${localData.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${modelName})`);
-          }
-        }
-      } catch {
-        // Fallback to existing state below
-      }
-
-      const effectiveTaskModel = resolvedActiveTaskModel || taskImproveModel;
+      // Never block submit with extra preflight network calls.
+      const effectiveTaskModel = activeImproveTaskModel || taskImproveModel;
       setLastImproveRequestTarget(effectiveTaskModel || 'unknown');
       const effectivePrefs = taskModelToPreferences(effectiveTaskModel) ?? apiPreferences;
 
