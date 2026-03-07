@@ -586,7 +586,8 @@ export async function listModels(
   if (apiKey) payload.apiKey = apiKey;
   if (endpointUrl) payload.endpointUrl = endpointUrl;
 
-  return callAIWithTimeout('list-models', payload, token);
+  const result = await callAIWithTimeout('list-models', payload, token);
+  return Array.isArray(result) ? result : [];
 }
 
 export function triggerKeywordExtraction(promptId: string, content: string, token: string = '') {

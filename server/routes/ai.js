@@ -474,6 +474,22 @@ async function callDeepInfra(apiKey, system, user, model, maxTokens = 1500, temp
 async function listModels(providerConfig) {
     const { provider, apiKey, endpoint_url } = providerConfig;
 
+    const asArray = (value) => Array.isArray(value) ? value : [];
+
+    async function readJsonSafe(res) {
+        try {
+            return await res.json();
+        } catch {
+            return null;
+        }
+    }
+
+    function getErrorMessage(data, fallback) {
+        if (!data) return fallback;
+        if (typeof data === 'string') return data;
+        return data?.error?.message || data?.error || data?.message || fallback;
+    }
+
     const REASONING_RE = /reasoning|magistral|r1|deepseek-r|thinking|o1|o3|qwen.*thinking/i;
     const WEB_SEARCH_RE = /online$|compound/i;
     const CODE_RE = /codestral|code\b|coder|starcoder|deepseek-coder/i;
@@ -517,7 +533,7 @@ async function listModels(providerConfig) {
             const res = await fetch(`${baseUrl}/api/v1/models`);
             if (res.ok) {
                 const data = await res.json();
-                return data.data.map(m => ({ id: m.id, name: m.id }));
+                return asArray(data?.data).map(m => ({ id: m.id, name: m.id }));
             }
         } catch (e) { /* ignore */ }
 
@@ -526,7 +542,7 @@ async function listModels(providerConfig) {
             const res = await fetch(`${baseUrl}/v1/models`);
             if (res.ok) {
                 const data = await res.json();
-                return data.data.map(m => ({ id: m.id, name: m.id }));
+                return asArray(data?.data).map(m => ({ id: m.id, name: m.id }));
             }
         } catch (e) { /* ignore */ }
 
@@ -536,7 +552,7 @@ async function listModels(providerConfig) {
                 const res = await fetch(`${urlClean}/models`);
                 if (res.ok) {
                     const data = await res.json();
-                    return data.data.map(m => ({ id: m.id, name: m.id }));
+                    return asArray(data?.data).map(m => ({ id: m.id, name: m.id }));
                 }
             } catch (e) { /* ignore */ }
         }
@@ -546,7 +562,7 @@ async function listModels(providerConfig) {
             const res = await fetch(`${baseUrl}/api/tags`);
             if (res.ok) {
                 const data = await res.json();
-                return data.models.map(m => ({ id: m.name, name: m.name }));
+                return asArray(data?.models).map(m => ({ id: m.name, name: m.name }));
             }
         } catch (e) { /* ignore */ }
 
@@ -555,8 +571,11 @@ async function listModels(providerConfig) {
 
     if (provider === 'openrouter') {
         const res = await fetch('https://openrouter.ai/api/v1/models');
-        const data = await res.json();
-        return data.data.map(m => ({
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+            throw new Error(getErrorMessage(data, `OpenRouter list-models failed (${res.status})`));
+        }
+        return asArray(data?.data).map(m => ({
             id: m.id,
             name: m.name,
             description: m.description,
@@ -569,32 +588,44 @@ async function listModels(providerConfig) {
         const res = await fetch('https://api.together.xyz/v1/models', {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         });
-        const data = await res.json();
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+            throw new Error(getErrorMessage(data, `Together list-models failed (${res.status})`));
+        }
         // filter for chat/completion models if possible, but together returns all
-        return data.map(m => ({ id: m.id, name: m.display_name || m.id, description: m.description }));
+        return asArray(data).map(m => ({ id: m.id, name: m.display_name || m.id, description: m.description }));
     }
 
     if (provider === 'openai') {
         const res = await fetch('https://api.openai.com/v1/models', {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         });
-        const data = await res.json();
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+            throw new Error(getErrorMessage(data, `OpenAI list-models failed (${res.status})`));
+        }
         // simple filter for gpt models
-        return data.data.filter(m => m.id.includes('gpt')).map(m => ({ id: m.id, name: m.id }));
+        return asArray(data?.data).filter(m => m.id.includes('gpt')).map(m => ({ id: m.id, name: m.id }));
     }
 
     if (provider === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await res.json();
-        return data.models.map(m => ({ id: m.name.replace('models/', ''), name: m.displayName, description: m.description }));
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+            throw new Error(getErrorMessage(data, `Gemini list-models failed (${res.status})`));
+        }
+        return asArray(data?.models).map(m => ({ id: m.name.replace('models/', ''), name: m.displayName, description: m.description }));
     }
 
     if (provider === 'deepinfra') {
         const res = await fetch('https://api.deepinfra.com/v1/openai/models', {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         });
-        const data = await res.json();
-        return data.data.filter(m => !m.id.includes('vllm')).map(m => ({ id: m.id, name: m.id, description: m.description }));
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+            throw new Error(getErrorMessage(data, `DeepInfra list-models failed (${res.status})`));
+        }
+        return asArray(data?.data).filter(m => !m.id.includes('vllm')).map(m => ({ id: m.id, name: m.id, description: m.description }));
     }
 
     return [];
