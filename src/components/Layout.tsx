@@ -5,7 +5,8 @@ import {
   Wrench, Clock, ChevronLeft, ChevronRight,
   LayoutDashboard, Wand2, Sparkles, Users, Image as ImageIcon,
   Compass, FlaskConical, Fingerprint, Settings,
-  Moon, Sun, BarChart2, Loader2, Info, Download, Wifi, WifiOff
+  Moon, Sun, BarChart2, Loader2, Info, Download, Wifi, WifiOff,
+  AlertTriangle, Database, Images
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useExtension } from '../context/ExtensionContext';
@@ -17,6 +18,16 @@ import { RateLimitWidget } from './RateLimitWidget';
 import { BudgetAlertWidget } from './BudgetAlertWidget';
 import { RateLimitAlertWidget } from './RateLimitAlertWidget';
 import { useUsageDashboard } from '../hooks/useUsage';
+import Modal from './Modal';
+import {
+  evaluateBackupReminderOnSessionStart,
+  markBackupReminderPromptShown,
+  type BackupReminderReason,
+} from '../lib/user-settings';
+import {
+  exportDatabaseAndImagesBackupZip,
+  exportDatabaseBackupJson,
+} from '../lib/backup-utils';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
@@ -64,6 +75,9 @@ export default function Layout() {
 
   const { theme, setTheme } = useTheme();
   const { connectionStatus, lastSyncTime } = useExtension();
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
+  const [backupReminderReason, setBackupReminderReason] = useState<BackupReminderReason | null>(null);
+  const [backupReminderBusy, setBackupReminderBusy] = useState(false);
 
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar_collapsed') === 'true'; }
@@ -92,6 +106,48 @@ export default function Layout() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const evaluation = evaluateBackupReminderOnSessionStart();
+    if (!evaluation.shouldPrompt) return;
+    setBackupReminderReason(evaluation.reason);
+    setShowBackupReminder(true);
+  }, []);
+
+  const closeBackupReminder = () => {
+    markBackupReminderPromptShown();
+    setShowBackupReminder(false);
+  };
+
+  const handleBackupReminderDatabaseOnly = async () => {
+    setBackupReminderBusy(true);
+    try {
+      await exportDatabaseBackupJson();
+      toast.success('Database backup saved.');
+      markBackupReminderPromptShown();
+      setShowBackupReminder(false);
+    } catch (err) {
+      console.error('Database backup failed from reminder modal:', err);
+      toast.error('Failed to create database backup.');
+    } finally {
+      setBackupReminderBusy(false);
+    }
+  };
+
+  const handleBackupReminderDatabaseWithImages = async () => {
+    setBackupReminderBusy(true);
+    try {
+      await exportDatabaseAndImagesBackupZip();
+      toast.success('Database + images backup saved.');
+      markBackupReminderPromptShown();
+      setShowBackupReminder(false);
+    } catch (err) {
+      console.error('Database + images backup failed from reminder modal:', err);
+      toast.error('Failed to create database + images backup.');
+    } finally {
+      setBackupReminderBusy(false);
+    }
+  };
 
   const toggleSidebar = () => {
     const next = !collapsed;
@@ -302,6 +358,58 @@ export default function Layout() {
           </div>
         )}
       </main>
+
+      <Modal
+        open={showBackupReminder}
+        onClose={backupReminderBusy ? () => {} : closeBackupReminder}
+        title="Backup Reminder"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-400" />
+            <div className="text-sm text-amber-100">
+              <p className="font-semibold">Time to make a backup.</p>
+              <p className="text-amber-200/80 mt-1">
+                {backupReminderReason === 'sessions'
+                  ? 'You reached your configured session interval for backup reminders.'
+                  : 'You reached your configured day interval for backup reminders.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="text-sm text-slate-300">
+            Choose how you want to back up your data right now:
+          </div>
+
+          <div className="grid gap-2">
+            <button
+              onClick={handleBackupReminderDatabaseOnly}
+              disabled={backupReminderBusy}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-600/90 px-4 py-2.5 font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {backupReminderBusy ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+              Backup Database Only
+            </button>
+
+            <button
+              onClick={handleBackupReminderDatabaseWithImages}
+              disabled={backupReminderBusy}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-600/90 px-4 py-2.5 font-medium text-white transition-colors hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {backupReminderBusy ? <Loader2 size={16} className="animate-spin" /> : <Images size={16} />}
+              Backup Database + Images
+            </button>
+
+            <button
+              onClick={closeBackupReminder}
+              disabled={backupReminderBusy}
+              className="w-full rounded-lg border border-slate-600 bg-slate-700/40 px-4 py-2.5 font-medium text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

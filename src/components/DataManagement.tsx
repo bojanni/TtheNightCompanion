@@ -1,9 +1,13 @@
 import { useState, useRef } from 'react';
-import { Download, Upload, AlertTriangle, Loader2, Database, FileJson, Trash2, X } from 'lucide-react';
+import { Download, Upload, AlertTriangle, Loader2, Database, FileJson, Trash2, X, Images } from 'lucide-react';
 import { z } from 'zod';
 import { db } from '../lib/api';
 import { handleError, showSuccess } from '../lib/error-handler';
 import { API_BASE_URL } from '../lib/constants';
+import {
+  exportDatabaseBackupJson,
+  exportDatabaseAndImagesBackupZip,
+} from '../lib/backup-utils';
 
 const TableRowSchema = z.record(z.string(), z.unknown());
 
@@ -25,10 +29,9 @@ const BackupSchema = z.object({
   }),
 });
 
-type BackupData = z.infer<typeof BackupSchema>;
-
 export function DataManagement() {
-  const [exporting, setExporting] = useState(false);
+  const [exportingDatabase, setExportingDatabase] = useState(false);
+  const [exportingDatabaseWithImages, setExportingDatabaseWithImages] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importStats, setImportStats] = useState<Record<string, number> | null>(null);
 
@@ -39,73 +42,27 @@ export function DataManagement() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const downloadJSON = (data: unknown, filename: string) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const exportAllData = async () => {
-    setExporting(true);
-
+    setExportingDatabase(true);
     try {
-      const [
-        { data: prompts },
-        { data: characters },
-        { data: characterDetails },
-        { data: gallery },
-        { data: tags },
-        { data: promptTags },
-        { data: modelUsage },
-        { data: promptVersions },
-        { data: styleLearning },
-        { data: batchTests },
-        { data: batchTestResults },
-      ] = await Promise.all([
-        db.from('prompts').select('*'),
-        db.from('characters').select('*'),
-        db.from('character_details').select('*'),
-        db.from('gallery').select('*'),
-        db.from('tags').select('*'),
-        db.from('prompt_tags').select('*'),
-        db.from('model_usage').select('*'),
-        db.from('prompt_versions').select('*'),
-        db.from('style_learning').select('*'),
-        db.from('batch_tests').select('*'),
-        db.from('batch_test_results').select('*'),
-      ]);
-
-      const backup: BackupData = {
-        version: '1.0',
-        exported_at: new Date().toISOString(),
-        data: {
-          prompts: prompts || [],
-          characters: characters || [],
-          character_details: characterDetails || [],
-          gallery: gallery || [],
-          tags: tags || [],
-          prompt_tags: promptTags || [],
-          model_usage: modelUsage || [],
-          prompt_versions: promptVersions || [],
-          style_learning: styleLearning || [],
-          batch_tests: batchTests || [],
-          batch_test_results: batchTestResults || [],
-        },
-      };
-
-      const timestamp = new Date().toISOString().split('T')[0];
-      downloadJSON(backup, `nightcafe-companion-backup-${timestamp}.json`);
+      await exportDatabaseBackupJson();
       showSuccess('Data exported successfully!');
     } catch (err) {
       handleError(err as Error, 'DataExport');
     } finally {
-      setExporting(false);
+      setExportingDatabase(false);
+    }
+  };
+
+  const exportAllDataWithImages = async () => {
+    setExportingDatabaseWithImages(true);
+    try {
+      await exportDatabaseAndImagesBackupZip();
+      showSuccess('Data and images exported successfully!');
+    } catch (err) {
+      handleError(err as Error, 'DataExportWithImages');
+    } finally {
+      setExportingDatabaseWithImages(false);
     }
   };
 
@@ -221,10 +178,10 @@ export function DataManagement() {
 
             <button
               onClick={exportAllData}
-              disabled={exporting}
+              disabled={exportingDatabase || exportingDatabaseWithImages}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium border border-emerald-500/20"
             >
-              {exporting ? (
+              {exportingDatabase ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Exporting...
@@ -233,6 +190,24 @@ export function DataManagement() {
                 <>
                   <Download className="w-4 h-4" />
                   Export All Data
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={exportAllDataWithImages}
+              disabled={exportingDatabase || exportingDatabaseWithImages}
+              className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium border border-indigo-500/20"
+            >
+              {exportingDatabaseWithImages ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Exporting ZIP...
+                </>
+              ) : (
+                <>
+                  <Images className="w-4 h-4" />
+                  Export DB + Images (ZIP)
                 </>
               )}
             </button>

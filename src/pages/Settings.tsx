@@ -7,6 +7,14 @@ import {
   setPromptDiversityThreshold,
   PROMPT_DIVERSITY_THRESHOLD_MIN,
   PROMPT_DIVERSITY_THRESHOLD_MAX,
+  getBackupReminderSettings,
+  setBackupReminderEnabled,
+  setBackupReminderSessionInterval,
+  setBackupReminderDayInterval,
+  BACKUP_REMINDER_SESSION_INTERVAL_MIN,
+  BACKUP_REMINDER_SESSION_INTERVAL_MAX,
+  BACKUP_REMINDER_DAY_INTERVAL_MIN,
+  BACKUP_REMINDER_DAY_INTERVAL_MAX,
 } from '../lib/user-settings';
 
 export default function Settings() {
@@ -15,6 +23,7 @@ export default function Settings() {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(true);
   const [apiLogging, setApiLogging] = useState(() => localStorage.getItem('nc_api_logging_enabled') === 'true');
   const [diversityThreshold, setDiversityThreshold] = useState(() => getPromptDiversityThreshold());
+  const [backupReminderSettings, setBackupReminderSettingsState] = useState(() => getBackupReminderSettings());
 
   const toggleApiLogging = () => {
     const newValue = !apiLogging;
@@ -27,6 +36,22 @@ export default function Settings() {
     setDiversityThreshold(saved);
   };
 
+  const onToggleBackupReminder = () => {
+    const nextEnabled = !backupReminderSettings.enabled;
+    setBackupReminderEnabled(nextEnabled);
+    setBackupReminderSettingsState((prev) => ({ ...prev, enabled: nextEnabled }));
+  };
+
+  const onBackupSessionIntervalChange = (value: number) => {
+    const saved = setBackupReminderSessionInterval(value);
+    setBackupReminderSettingsState((prev) => ({ ...prev, everySessions: saved }));
+  };
+
+  const onBackupDayIntervalChange = (value: number) => {
+    const saved = setBackupReminderDayInterval(value);
+    setBackupReminderSettingsState((prev) => ({ ...prev, everyDays: saved }));
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="space-y-8">
@@ -37,7 +62,7 @@ export default function Settings() {
             onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
             className="flex items-center justify-between w-full group"
           >
-            <h2 className="text-xl font-bold text-white group-hover:text-teal-400 transition-colors uppercase tracking-wider text-sm opacity-50 px-1">
+            <h2 className="font-bold text-white group-hover:text-teal-400 transition-colors uppercase tracking-wider text-sm opacity-50 px-1">
               Advanced Settings
             </h2>
             <ChevronDown
@@ -102,6 +127,62 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+
+                <div className="bg-slate-900/40 rounded-xl border border-slate-800 p-6 mt-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-amber-300 font-bold">B</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-xl font-bold text-white">Backup Reminder</h2>
+                        <button
+                          onClick={onToggleBackupReminder}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${backupReminderSettings.enabled ? 'bg-teal-500' : 'bg-slate-700'}`}
+                          title="Toggle Backup Reminder"
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${backupReminderSettings.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+
+                      <p className="text-sm text-slate-400 mb-4">
+                        Vraag automatisch om een database-backup te maken (met of zonder afbeeldingen) op basis van sessies of verstreken dagen.
+                      </p>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <label className="text-sm text-slate-300">
+                          Elke X sessies
+                          <input
+                            type="number"
+                            min={BACKUP_REMINDER_SESSION_INTERVAL_MIN}
+                            max={BACKUP_REMINDER_SESSION_INTERVAL_MAX}
+                            value={backupReminderSettings.everySessions}
+                            disabled={!backupReminderSettings.enabled}
+                            onChange={(e) => onBackupSessionIntervalChange(parseInt(e.target.value || '0', 10))}
+                            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 disabled:opacity-50"
+                          />
+                        </label>
+
+                        <label className="text-sm text-slate-300">
+                          Elke N dagen
+                          <input
+                            type="number"
+                            min={BACKUP_REMINDER_DAY_INTERVAL_MIN}
+                            max={BACKUP_REMINDER_DAY_INTERVAL_MAX}
+                            value={backupReminderSettings.everyDays}
+                            disabled={!backupReminderSettings.enabled}
+                            onChange={(e) => onBackupDayIntervalChange(parseInt(e.target.value || '0', 10))}
+                            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 disabled:opacity-50"
+                          />
+                        </label>
+                      </div>
+
+                      <p className="mt-3 text-xs text-slate-500">
+                        Herinnering verschijnt zodra een van beide drempels is bereikt.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -113,7 +194,7 @@ export default function Settings() {
             onClick={() => setIsDataManagementOpen(!isDataManagementOpen)}
             className="flex items-center justify-between w-full group"
           >
-            <h2 className="text-xl font-bold text-white group-hover:text-teal-400 transition-colors uppercase tracking-wider text-sm opacity-50 px-1">
+            <h2 className="font-bold text-white group-hover:text-teal-400 transition-colors uppercase tracking-wider text-sm opacity-50 px-1">
               {t('settings.dataManagement')}
             </h2>
             <ChevronDown
