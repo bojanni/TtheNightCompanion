@@ -29,3 +29,4 @@ openmemory*.*
 .qwen/*
 .llm-chat-history/*
 uploads*
+.copilot-memory.json
