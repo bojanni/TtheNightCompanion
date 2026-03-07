@@ -29,4 +29,6 @@ openmemory*.*
 .qwen/*
 .llm-chat-history/*
 uploads*
+user/images/nightcompanion/
 .copilot-memory.json
+.trae*

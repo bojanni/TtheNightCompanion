@@ -131,6 +131,12 @@ Migration Scripts: Easy setup and schema updates
 JSON Export/Import: Portable backup format
 No Cloud Dependency: Complete offline capability after initial AI provider setup
 
+Local Media Storage
+
+Uploaded images and videos are stored locally on disk and are not intended to be synced in this repository.
+Default media path: `~/images/nightcompanion` (for Windows this resolves to `C:\Users\<username>\images\nightcompanion`).
+Optional override: set `NC_UPLOADS_DIR` to use a different local folder.
+
 Why Choose NightCafe Companion?
 For Beginners
 

@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { encodeImageToBlurhash } = require('../lib/blurhash');
+const { resolveUploadsDir } = require('../lib/upload-paths');
 
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -22,7 +23,7 @@ const storage = multer.diskStorage({
         const isVideo = ALLOWED_VIDEO_TYPES.includes(file.mimetype);
         const timestamp = Date.now();
         const yearMonth = getYearMonthPath(timestamp);
-        const uploadDir = path.join(__dirname, '../../uploads', isVideo ? 'videos' : 'images', yearMonth);
+        const uploadDir = path.join(resolveUploadsDir(), isVideo ? 'videos' : 'images', yearMonth);
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }

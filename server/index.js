@@ -10,6 +10,7 @@ const path = require('path');
 const { initSchema } = require('./db-init');
 const errorMiddleware = require('./middleware/error-handler');
 const { handlePgError } = require('./lib/pg-error-handler');
+const { resolveUploadsDir } = require('./lib/upload-paths');
 
 enableAsyncHandler(express);
 const app = express();
@@ -153,11 +154,12 @@ app.get('/api/events', (req, res) => {
 });
 
 app.use('/api/import', require('./routes/import'));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+const uploadsDir = resolveUploadsDir();
+app.use('/uploads', express.static(uploadsDir));
 
 // Fallback compatibility for older image URLs that used /api/images or /api/videos
-app.use('/api/images', express.static(path.join(__dirname, '../uploads/images')));
-app.use('/api/videos', express.static(path.join(__dirname, '../uploads/videos')));
+app.use('/api/images', express.static(path.join(uploadsDir, 'images')));
+app.use('/api/videos', express.static(path.join(uploadsDir, 'videos')));
 
 // Health check
 app.get('/api/health', (req, res) => {
