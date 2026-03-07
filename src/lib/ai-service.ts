@@ -215,11 +215,31 @@ export async function improvePromptWithNegative(
   if (modelTips && modelTips.length > 0) payload.modelTips = modelTips;
   const result = await callAIWithTimeout('improve-with-negative', payload, token) as unknown;
 
+  const originalNegative = negativePrompt.trim();
+
   if (result && typeof result === 'object' && 'improved' in result && 'negativePrompt' in result) {
     return {
       improved: String((result as { improved: unknown }).improved || '').trim(),
       negativePrompt: String((result as { negativePrompt: unknown }).negativePrompt || '').trim()
     };
+  }
+
+  // Handle loosely shaped object responses from providers/parsers.
+  if (result && typeof result === 'object') {
+    const obj = result as Record<string, unknown>;
+    const improvedObjectText = String(
+      obj.improved ?? obj.optimizedPrompt ?? obj.prompt ?? obj.text ?? obj.content ?? ''
+    ).trim();
+    const negativeObjectText = String(
+      obj.negativePrompt ?? obj.negative_prompt ?? obj.negative ?? originalNegative
+    ).trim();
+
+    if (improvedObjectText) {
+      return {
+        improved: improvedObjectText,
+        negativePrompt: negativeObjectText
+      };
+    }
   }
 
   const raw = result && typeof result === 'object' && 'raw' in result
@@ -244,11 +264,19 @@ export async function improvePromptWithNegative(
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')) as { improved?: unknown; negativePrompt?: unknown };
-      if (typeof parsed.improved === 'string' || typeof parsed.negativePrompt === 'string') {
+      const parsed = JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')) as {
+        improved?: unknown;
+        optimizedPrompt?: unknown;
+        prompt?: unknown;
+        negativePrompt?: unknown;
+        negative_prompt?: unknown;
+      };
+      const improvedParsedText = String(parsed.improved ?? parsed.optimizedPrompt ?? parsed.prompt ?? '').trim();
+      const negativeParsedText = String(parsed.negativePrompt ?? parsed.negative_prompt ?? originalNegative).trim();
+      if (improvedParsedText) {
         return {
-          improved: String(parsed.improved || '').trim(),
-          negativePrompt: String(parsed.negativePrompt || '').trim()
+          improved: improvedParsedText,
+          negativePrompt: negativeParsedText
         };
       }
     } catch {
@@ -256,7 +284,12 @@ export async function improvePromptWithNegative(
     }
   }
 
-  throw new Error('Invalid JSON from AI');
+  // Last-resort fallback: use plain improve endpoint so UI still gets a usable result.
+  const improvedFallback = await improvePrompt(prompt, token, apiPreferences, taskModel, modelTips);
+  return {
+    improved: String(improvedFallback || prompt).trim(),
+    negativePrompt: originalNegative
+  };
 }
 
 export interface DetailedImprovement {
