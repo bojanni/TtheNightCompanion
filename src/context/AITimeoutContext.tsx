@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { createContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import ChoiceModal from '../components/ChoiceModal';
 import { Clock } from 'lucide-react';
 
@@ -10,15 +10,7 @@ interface AITimeoutContextType {
   showTimeoutModal: (action: string) => Promise<TimeoutChoice>;
 }
 
-const AITimeoutContext = createContext<AITimeoutContextType | null>(null);
-
-export function useAITimeout() {
-  const context = useContext(AITimeoutContext);
-  if (!context) {
-    throw new Error('useAITimeout must be used within AITimeoutProvider');
-  }
-  return context;
-}
+export const AITimeoutContext = createContext<AITimeoutContextType | null>(null);
 
 interface AITimeoutProviderProps {
   children: ReactNode;

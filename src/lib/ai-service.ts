@@ -88,47 +88,52 @@ async function callAI(action: string, payload: Record<string, unknown>, token: s
 // Timeout wrapper for AI calls
 async function callAIWithTimeout(action: string, payload: Record<string, unknown>, token: string): Promise<any> {
   const TIMEOUT_MS = 30000; // 30 seconds
-  let timeoutId: number | null = null;
-  let abortController: AbortController | null = null;
   
   const performCall = async (): Promise<any> => {
     while (true) {
-      try {
-        // Create a promise that resolves when user makes a choice
-        const userChoicePromise = new Promise<'keep-waiting' | 'skip-ai' | 'abort'>((resolve) => {
-          const handler = (event: CustomEvent) => {
-            if (event.detail.action === action) {
-              resolve(event.detail.choice);
-              window.removeEventListener('nc-timeout-choice' as any, handler);
-            }
-          };
-          window.addEventListener('nc-timeout-choice' as any, handler);
-        });
+      let timeoutId: number | null = null;
+      let timeoutOccurred = false;
 
+      try {
         // Create timeout promise
-        const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        const timeoutPromise = new Promise<void>((resolve) => {
           timeoutId = window.setTimeout(() => {
-            resolve('timeout');
+            timeoutOccurred = true;
+            resolve();
           }, TIMEOUT_MS);
         });
 
         // Race between API call and timeout
         const apiCall = callAI(action, payload, token);
-        const result = await Promise.race([apiCall, timeoutPromise]);
+        const result = await Promise.race([
+          apiCall,
+          timeoutPromise.then(() => '__TIMEOUT__' as const)
+        ]);
 
-        if (result === 'timeout') {
+        // Clear timeout if API completed first
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        // Check if timeout occurred
+        if (result === '__TIMEOUT__') {
           // Timeout occurred, dispatch event to show modal
           window.dispatchEvent(new CustomEvent('nc-ai-timeout', {
             detail: { action }
           }));
 
           // Wait for user choice
-          const choice = await userChoicePromise;
-          
-          if (timeoutId !== null) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
+          const choice = await new Promise<'keep-waiting' | 'skip-ai' | 'abort'>((resolve) => {
+            const handler = (event: Event) => {
+              const customEvent = event as CustomEvent<{ action: string; choice: 'keep-waiting' | 'skip-ai' | 'abort' }>;
+              if (customEvent.detail.action === action) {
+                resolve(customEvent.detail.choice);
+                window.removeEventListener('nc-timeout-choice', handler);
+              }
+            };
+            window.addEventListener('nc-timeout-choice', handler);
+          });
 
           if (choice === 'keep-waiting') {
             // Continue the loop to wait another 30 seconds
@@ -141,16 +146,11 @@ async function callAIWithTimeout(action: string, payload: Record<string, unknown
           }
         } else {
           // API call completed successfully
-          if (timeoutId !== null) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
           return result;
         }
       } catch (error) {
         if (timeoutId !== null) {
           clearTimeout(timeoutId);
-          timeoutId = null;
         }
         throw error;
       }
