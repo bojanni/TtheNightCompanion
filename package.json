@@ -11,6 +11,8 @@
     "test:diversity": "node --test --experimental-strip-types src/lib/diversity-context.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "schema:drift-check": "node scripts/schema-drift-check.js",
+    "db:migrate": "node server/scripts/run-migrations.js",
+    "db:migrate:status": "node server/scripts/run-migrations.js --status",
     "electron": "cross-env NODE_ENV=development .\\node_modules\\electron\\dist\\electron.exe .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run electron\"",
     "electron:build": "npm run build && electron-builder",

@@ -7,6 +7,8 @@
         "start": "node index.js",
         "dev": "nodemon index.js",
         "setup-db": "node db-init.js",
+        "migrate": "node scripts/run-migrations.js",
+        "migrate:status": "node scripts/run-migrations.js --status",
         "test:async-handler": "node scripts/test-async-handler.js"
     },
     "dependencies": {

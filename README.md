@@ -179,6 +179,29 @@ Storage: 500MB for application, additional space for database
 PostgreSQL: Version 13+ (included in setup scripts)
 Internet: Required only for AI provider API calls
 
+Schema Governance
+
+To prevent schema drift between `create-schema.sql` and `server/db-init.js`, keep this workflow:
+
+1. Add table/column definitions to `create-schema.sql` first.
+2. Mirror backward-compatible evolution in `server/db-init.js` (`CREATE TABLE IF NOT EXISTS` + `addColumn(...)`).
+3. Run `npm run schema:drift-check` locally before commit.
+
+CI enforces this with `.github/workflows/schema-drift-check.yml`, so pull requests fail when drift is detected.
+
+Versioned Migrations (Foundation)
+
+The repository now includes a versioned SQL migration pipeline under `server/migrations/`.
+
+- Run migrations: `npm run db:migrate`
+- Show migration status: `npm run db:migrate:status`
+
+Notes:
+
+1. This is intentionally non-breaking: `server/db-init.js` remains the bootstrap path for fresh installs.
+2. New incremental schema changes should be added as SQL files in `server/migrations/`.
+3. Keep `create-schema.sql` and `server/db-init.js` aligned until migration-first bootstrapping is fully adopted.
+
 Future Enhancements
 
 Prompt Templates: Save and reuse complex prompt structures
