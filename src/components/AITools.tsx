@@ -112,18 +112,21 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
 
   const [suggestedModel, setSuggestedModel] = useState<ModelInfo | null>(null);
   const [activeModel, setActiveModel] = useState<string>('');
+  const [activeImproveTaskModel, setActiveImproveTaskModel] = useState<string>('');
+  const [lastImproveRequestTarget, setLastImproveRequestTarget] = useState<string>('');
   const [modelTips, setModelTips] = useState<string[]>([]);
   const [useModelTips, setUseModelTips] = useState(false);
 
   async function fetchActiveModel() {
     try {
       const keys = await listApiKeys();
-      const activeKey = keys.find(k => k.is_active_improve || k.is_active);
+      const activeKey = keys.find(k => k.is_active_improve) ?? keys.find(k => k.is_active);
 
       if (activeKey) {
         const model = activeKey.model_improve || activeKey.model_name || getDefaultModelForProvider(activeKey.provider);
         const providerName = activeKey.provider.charAt(0).toUpperCase() + activeKey.provider.slice(1);
         setActiveModel(`${providerName} ${model}`);
+        setActiveImproveTaskModel(`${activeKey.provider}:${model}`);
         return;
       }
 
@@ -136,10 +139,12 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
       if (localData) {
         const modelName = localData.model_improve || localData.model_name;
         setActiveModel(`${localData.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${modelName})`);
+        setActiveImproveTaskModel(`${localData.provider}:${modelName}`);
         return;
       }
 
       setActiveModel('');
+      setActiveImproveTaskModel('');
     } catch (e) {
       console.error('Failed to fetch active model', e);
     }
@@ -223,23 +228,63 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         if (saved) apiPreferences = JSON.parse(saved);
       } catch (e) { }
 
-      // Always prioritize the selected task model from Settings/Task Models.
-      const effectivePrefs = taskModelToPreferences(taskImproveModel) ?? apiPreferences;
+      // Always resolve the truly active Improve model from Settings at request time.
+      let resolvedActiveTaskModel = activeImproveTaskModel;
+      try {
+        const keys = await listApiKeys();
+        const activeKey = keys.find(k => k.is_active_improve) ?? keys.find(k => k.is_active);
+        if (activeKey) {
+          const model = activeKey.model_improve || activeKey.model_name || getDefaultModelForProvider(activeKey.provider);
+          resolvedActiveTaskModel = `${activeKey.provider}:${model}`;
+          setActiveImproveTaskModel(resolvedActiveTaskModel);
+          setActiveModel(`${activeKey.provider.charAt(0).toUpperCase() + activeKey.provider.slice(1)} ${model}`);
+        } else {
+          const { data: localData } = await db
+            .from('user_local_endpoints')
+            .select('*')
+            .eq('is_active_improve', true)
+            .maybeSingle();
+          if (localData) {
+            const modelName = localData.model_improve || localData.model_name;
+            resolvedActiveTaskModel = `${localData.provider}:${modelName}`;
+            setActiveImproveTaskModel(resolvedActiveTaskModel);
+            setActiveModel(`${localData.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${modelName})`);
+          }
+        }
+      } catch {
+        // Fallback to existing state below
+      }
+
+      const effectiveTaskModel = resolvedActiveTaskModel || taskImproveModel;
+      setLastImproveRequestTarget(effectiveTaskModel || 'unknown');
+      const effectivePrefs = taskModelToPreferences(effectiveTaskModel) ?? apiPreferences;
 
       if (!supportsNegativePrompt(suggestedModel?.id || '')) {
         const result: any = await optimizePromptForModel(improveInput, suggestedModel?.name ?? 'DALL-E 3', token, negativeInput, effectivePrefs);
-        const improvedText = result.optimizedPrompt || result.improved || result.prompt || result.raw || (typeof result === 'string' ? result : '');
-        setImproveResult(improvedText);
-        setNegativeResult(result.negativePrompt || '');
+        const improvedText = (result?.optimizedPrompt || result?.improved || result?.prompt || result?.raw || (typeof result === 'string' ? result : '') || '').trim();
+        if (improvedText) {
+          setImproveResult(improvedText);
+          setNegativeResult(result?.negativePrompt || '');
+        } else {
+          const fallbackImproved = await improvePrompt(improveInput, token, effectivePrefs, effectiveTaskModel, useModelTips ? modelTips : undefined);
+          setImproveResult(typeof fallbackImproved === 'string' ? fallbackImproved : String(fallbackImproved ?? improveInput));
+          setNegativeResult('');
+        }
       } else {
         const tips = useModelTips ? modelTips : undefined;
         if (negativeInput.trim()) {
-          const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, effectivePrefs, taskImproveModel, tips);
-          const improvedText = result.improved || result.optimizedPrompt || result.prompt || result.raw || (typeof result === 'string' ? result : '');
-          setImproveResult(improvedText);
-          setNegativeResult(result.negativePrompt || '');
+          const result: any = await improvePromptWithNegative(improveInput, negativeInput.trim(), token, effectivePrefs, effectiveTaskModel, tips);
+          const improvedText = (result?.improved || result?.optimizedPrompt || result?.prompt || result?.raw || (typeof result === 'string' ? result : '') || '').trim();
+          if (improvedText) {
+            setImproveResult(improvedText);
+            setNegativeResult(result?.negativePrompt || '');
+          } else {
+            const fallbackImproved = await improvePrompt(improveInput, token, effectivePrefs, effectiveTaskModel, tips);
+            setImproveResult(typeof fallbackImproved === 'string' ? fallbackImproved : String(fallbackImproved ?? improveInput));
+            setNegativeResult(negativeInput.trim());
+          }
         } else {
-          const improved = await improvePrompt(improveInput, token, effectivePrefs, taskImproveModel, tips);
+          const improved = await improvePrompt(improveInput, token, effectivePrefs, effectiveTaskModel, tips);
           setImproveResult(typeof improved === 'string' ? improved : String(improved ?? ''));
           setNegativeResult('');
         }
@@ -396,6 +441,7 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
               onClear={() => { setImproveResult(''); setNegativeResult(''); }}
               generatedPrompt={generatedPrompt} generatedNegativePrompt={generatedNegativePrompt}
               suggestedModel={suggestedModel} activeModel={activeModel}
+              debugRequestTarget={lastImproveRequestTarget || activeImproveTaskModel || taskImproveModel}
               modelTips={modelTips} useModelTips={useModelTips}
               onSetUseModelTips={setUseModelTips} onSetModelTips={setModelTips}
               availableModelTips={availableModelTips}
@@ -443,7 +489,7 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
 export default AITools;
 
 function ImproveTab({
-  input, setInput, negativeInput, setNegativeInput, result, negativeResult, loading, copied, saving, onSubmit, onCopy, onUse, onSave, onClear, generatedPrompt, generatedNegativePrompt, suggestedModel, activeModel, modelTips, useModelTips, onSetUseModelTips, onSetModelTips, availableModelTips,
+  input, setInput, negativeInput, setNegativeInput, result, negativeResult, loading, copied, saving, onSubmit, onCopy, onUse, onSave, onClear, generatedPrompt, generatedNegativePrompt, suggestedModel, activeModel, debugRequestTarget, modelTips, useModelTips, onSetUseModelTips, onSetModelTips, availableModelTips,
 }: any) {
   const { t } = useTranslation();
   const [showDiff, setShowDiff] = useState(true);
@@ -463,6 +509,13 @@ function ImproveTab({
           <h3 className="text-xs font-medium text-slate-300">
             {t('aiTools.improve.button', 'Improve Prompt')} with <span className="text-teal-400">{activeModel}</span>
           </h3>
+        </div>
+      )}
+      {debugRequestTarget && (
+        <div className="px-1 -mt-1">
+          <p className="text-[10px] text-slate-500">
+            Request target: <span className="text-slate-300 font-mono">{debugRequestTarget}</span>
+          </p>
         </div>
       )}
       <textarea
