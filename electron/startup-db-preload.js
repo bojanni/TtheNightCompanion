@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('startupDb', {
         config,
         dontAskAgain: Boolean(dontAskAgain),
     }),
+    cancel: () => ipcRenderer.send('startup-db:cancel'),
 });

@@ -371,7 +371,79 @@ export async function generateRandomPromptAI(token: string, theme?: string, maxW
   const payload: Record<string, unknown> = { theme, maxWords, greylist, creativity, recentPrompts };
   const prefs = taskModelToPreferences(taskModel);
   if (prefs) payload.apiPreferences = prefs;
-  return callAIWithTimeout('random', payload, token);
+  const result = await callAIWithTimeout('random', payload, token) as unknown;
+
+  const normalizeRandomResultObject = (value: unknown): { prompt: string; negativePrompt?: string; style?: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const obj = value as Record<string, unknown>;
+
+    const prompt = String(
+      obj.prompt ?? obj.improved ?? obj.optimizedPrompt ?? obj.content ?? obj.text ?? ''
+    ).trim();
+
+    if (!prompt) return null;
+
+    const negativePrompt = String(obj.negativePrompt ?? obj.negative_prompt ?? '').trim();
+    const style = String(obj.style ?? '').trim();
+
+    return {
+      prompt,
+      negativePrompt: negativePrompt || undefined,
+      style: style || undefined,
+    };
+  };
+
+  const parseJsonish = (rawInput: string): Record<string, unknown> | null => {
+    const raw = (rawInput || '').trim();
+    if (!raw) return null;
+
+    const codeMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    let candidate = codeMatch ? codeMatch[1].trim() : raw;
+    candidate = candidate.replace(/^json\s*[:\-]?\s*/i, '').trim();
+
+    const tryParse = (text: string): Record<string, unknown> | null => {
+      try {
+        return JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+
+    const direct = tryParse(candidate);
+    if (direct) return direct;
+
+    const firstBrace = candidate.indexOf('{');
+    const lastBrace = candidate.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const sliced = candidate.slice(firstBrace, lastBrace + 1);
+      const recovered = tryParse(sliced.replace(/,\s*([}\]])/g, '$1'));
+      if (recovered) return recovered;
+    }
+
+    return null;
+  };
+
+  const direct = normalizeRandomResultObject(result);
+  if (direct) return direct;
+
+  // Some backends wrap parse failures as { error, raw }, where raw still contains recoverable JSON.
+  if (result && typeof result === 'object' && 'raw' in (result as Record<string, unknown>)) {
+    const raw = String((result as { raw?: unknown }).raw || '');
+    const parsed = parseJsonish(raw);
+    const recovered = normalizeRandomResultObject(parsed);
+    if (recovered) return recovered;
+  }
+
+  if (typeof result === 'string') {
+    const parsed = parseJsonish(result);
+    const recovered = normalizeRandomResultObject(parsed);
+    if (recovered) return recovered;
+
+    const plain = result.trim();
+    if (plain) return { prompt: plain };
+  }
+
+  throw new Error('Random AI response did not include a valid prompt.');
 }
 
 export async function generateNegativePrompt(token: string): Promise<string> {

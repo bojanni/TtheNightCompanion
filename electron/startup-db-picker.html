@@ -45,6 +45,42 @@
       backdrop-filter: blur(8px);
       padding: 20px;
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: -20px -20px 16px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(15, 23, 42, 0.7);
+      -webkit-app-region: drag;
+    }
+
+    .titlebar-title {
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #cbd5e1;
+      font-weight: 700;
+    }
+
+    .titlebar-close {
+      appearance: none;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      background: rgba(248, 113, 113, 0.18);
+      color: #fecaca;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      line-height: 1;
+      width: 26px;
+      height: 26px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      text-align: center;
     }
 
     .title-row {
@@ -159,6 +195,11 @@
 </head>
 <body>
   <main class="panel">
+    <div class="titlebar">
+      <span class="titlebar-title">NightCompanion</span>
+      <button id="btn-close" class="titlebar-close" title="Close">x</button>
+    </div>
+
     <div class="title-row">
       <span class="dot"></span>
       <h1>NightCompanion Startup Database</h1>
@@ -210,6 +251,10 @@
 
     $('btn-current').addEventListener('click', () => {
       window.startupDb.useCurrent(dontAskEl.checked);
+    });
+
+    $('btn-close').addEventListener('click', () => {
+      window.startupDb.cancel();
     });
 
     $('btn-defaults').addEventListener('click', () => {

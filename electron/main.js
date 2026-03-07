@@ -254,6 +254,7 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
             ipcMain.removeListener('startup-db:use-current', onUseCurrent);
             ipcMain.removeListener('startup-db:use-defaults', onUseDefaults);
             ipcMain.removeListener('startup-db:confirm-open-existing', onConfirmOpenExisting);
+            ipcMain.removeListener('startup-db:cancel', onCancel);
         };
 
         const resolveOnce = (value) => {
@@ -285,6 +286,10 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
                 dontAskAgain: Boolean(payload?.dontAskAgain),
                 config,
             });
+        };
+
+        const onCancel = () => {
+            resolveOnce({ type: 'current', dontAskAgain: false });
         };
 
         ipcMain.handle('startup-db:get-data', async () => ({
@@ -328,10 +333,12 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
         ipcMain.on('startup-db:use-current', onUseCurrent);
         ipcMain.on('startup-db:use-defaults', onUseDefaults);
         ipcMain.on('startup-db:confirm-open-existing', onConfirmOpenExisting);
+        ipcMain.on('startup-db:cancel', onCancel);
 
         startupDbWindow = new BrowserWindow({
             width: 560,
             height: 420,
+            frame: false,
             resizable: false,
             minimizable: false,
             maximizable: false,
