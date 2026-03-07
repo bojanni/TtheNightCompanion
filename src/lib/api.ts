@@ -49,12 +49,23 @@ type DbTableMap = {
     user_profiles: UserProfile;
 };
 
+const nullableNumberFromUnknown = z.preprocess((value) => {
+    if (value === null || value === undefined || value === '') {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : value;
+    }
+    return value;
+}, z.number().nullable().optional());
+
 const promptSchema = z.object({
     id: z.string(),
     title: z.string().nullable().optional(),
     content: z.string(),
     notes: z.string().nullable().optional(),
-    rating: z.number().nullable().optional(),
+    rating: nullableNumberFromUnknown,
     is_template: z.boolean().nullable().optional(),
     is_favorite: z.boolean().nullable().optional(),
     created_at: z.string(),
@@ -63,7 +74,7 @@ const promptSchema = z.object({
     model: z.string().nullable().optional(),
     suggested_model: z.string().nullable().optional(),
     revised_prompt: z.string().nullable().optional(),
-    seed: z.number().nullable().optional(),
+    seed: nullableNumberFromUnknown,
     aspect_ratio: z.string().nullable().optional(),
     use_custom_aspect_ratio: z.boolean().nullable().optional(),
     start_image: z.string().nullable().optional(),
@@ -87,7 +98,13 @@ const promptVersionSchema = z.object({
     id: z.string(),
     prompt_id: z.string(),
     content: z.string(),
-    version_number: z.number(),
+    version_number: z.preprocess((value) => {
+        if (typeof value === 'string') {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : value;
+        }
+        return value;
+    }, z.number()),
     change_description: z.string().nullable().optional(),
     created_at: z.string(),
     model: z.string().nullable().optional(),
@@ -119,7 +136,7 @@ const galleryItemSchema = z.object({
     prompt_used: z.string().nullable().optional(),
     prompt_id: z.string().nullable().optional(),
     character_id: z.string().nullable().optional(),
-    rating: z.number().nullable().optional(),
+    rating: nullableNumberFromUnknown,
     collection_id: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     created_at: z.string(),
@@ -132,7 +149,7 @@ const galleryItemSchema = z.object({
     video_url: z.string().nullable().optional(),
     video_local_path: z.string().nullable().optional(),
     thumbnail_url: z.string().nullable().optional(),
-    duration_seconds: z.number().nullable().optional(),
+    duration_seconds: nullableNumberFromUnknown,
     storage_mode: z.enum(['url', 'local', 'both']).nullable().optional(),
 }).passthrough();
 
@@ -149,7 +166,7 @@ const modelUsageSchema = z.object({
     model_id: z.string().nullable().optional(),
     prompt_used: z.string().nullable().optional(),
     category: z.string().nullable().optional(),
-    rating: z.number().nullable().optional(),
+    rating: nullableNumberFromUnknown,
     is_keeper: z.boolean().nullable().optional(),
     notes: z.string().nullable().optional(),
     created_at: z.string(),
