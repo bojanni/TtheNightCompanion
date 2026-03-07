@@ -34,14 +34,16 @@
       align-items: center;
       justify-content: center;
       padding: 16px;
+      overflow: hidden;
     }
 
     .panel {
       width: 100%;
-      max-width: 520px;
+      max-width: 680px;
       border: 1px solid var(--card-border);
       border-radius: 16px;
       background: var(--card);
+      -webkit-backdrop-filter: blur(8px);
       backdrop-filter: blur(8px);
       padding: 20px;
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
@@ -122,6 +124,10 @@
       color: var(--muted);
       display: block;
       margin-bottom: 3px;
+    }
+
+    .meta-label-spaced {
+      margin-top: 10px;
     }
 
     .meta-value {
@@ -207,7 +213,7 @@
     <section class="meta">
       <span class="meta-label">Current</span>
       <div id="current-summary" class="meta-value">Loading...</div>
-      <span class="meta-label" style="margin-top:10px;">Config path</span>
+      <span class="meta-label meta-label-spaced">Config path</span>
       <div id="config-path" class="meta-value">Loading...</div>
     </section>
 

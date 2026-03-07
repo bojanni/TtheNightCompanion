@@ -15,6 +15,7 @@ if (app && app.commandLine) {
 let mainWindow;
 let serverProcess;
 let startupDbWindow;
+let isBootstrappingWindows = false;
 
 const DEFAULT_DB_CONFIG = {
     DB_USER: 'postgres',
@@ -340,8 +341,8 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
         ipcMain.on('startup-db:cancel', onCancel);
 
         startupDbWindow = new BrowserWindow({
-            width: 560,
-            height: 420,
+            width: 760,
+            height: 560,
             frame: true,
             resizable: false,
             minimizable: false,
@@ -376,6 +377,8 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
 }
 
 function createWindow() {
+    isBootstrappingWindows = true;
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -401,6 +404,16 @@ function createWindow() {
     } else {
         mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
     }
+
+    // Release startup guard as soon as the main window starts loading.
+    mainWindow.webContents.once('did-start-loading', () => {
+        isBootstrappingWindows = false;
+    });
+
+    // Fallback in case did-start-loading does not fire for any reason.
+    setTimeout(() => {
+        isBootstrappingWindows = false;
+    }, 3000);
 
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -512,9 +525,10 @@ ipcMain.handle('fetch-nightcafe', async (event, targetUrl) => {
 
 app.whenReady().then(async () => {
     try {
+        isBootstrappingWindows = true;
         const dbConfig = await resolveStartupDbConfig();
         startServer(dbConfig);
-        setTimeout(() => createWindow(), 1000);
+        createWindow();
     } catch (error) {
         console.error('Fatal startup error:', error);
         dialog.showErrorBox('Startup Error', error && error.message ? error.message : String(error));
@@ -523,6 +537,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+    if (isBootstrappingWindows) {
+        return;
+    }
     if (serverProcess) serverProcess.kill();
     if (process.platform !== 'darwin') app.quit();
 });
