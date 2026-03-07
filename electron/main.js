@@ -3,6 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const isDev = process.env.NODE_ENV === 'development';
 
+// Windows Electron can occasionally crash in GPU process on startup in dev.
+// Disabling hardware acceleration is a pragmatic stability tradeoff.
+app.disableHardwareAcceleration();
+
 // Disable dangling pointer detector which causes crashes in some Electron versions
 if (app && app.commandLine) {
     app.commandLine.appendSwitch('disable-features', 'DanglingPointerDetector');
@@ -338,7 +342,7 @@ function showStartupDbPickerWindow({ configPath, currentConfig }) {
         startupDbWindow = new BrowserWindow({
             width: 560,
             height: 420,
-            frame: false,
+            frame: true,
             resizable: false,
             minimizable: false,
             maximizable: false,
@@ -507,9 +511,15 @@ ipcMain.handle('fetch-nightcafe', async (event, targetUrl) => {
 });
 
 app.whenReady().then(async () => {
-    const dbConfig = await resolveStartupDbConfig();
-    startServer(dbConfig);
-    setTimeout(() => createWindow(), 1000);
+    try {
+        const dbConfig = await resolveStartupDbConfig();
+        startServer(dbConfig);
+        setTimeout(() => createWindow(), 1000);
+    } catch (error) {
+        console.error('Fatal startup error:', error);
+        dialog.showErrorBox('Startup Error', error && error.message ? error.message : String(error));
+        app.quit();
+    }
 });
 
 app.on('window-all-closed', () => {
