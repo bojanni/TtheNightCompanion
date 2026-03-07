@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Prompt Greylist
+CREATE TABLE IF NOT EXISTS prompt_greylist (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prompt_id UUID REFERENCES prompts(id) ON DELETE CASCADE,
+    reason TEXT,
+    greylisted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    UNIQUE(prompt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_greylist_prompt_id ON prompt_greylist(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_greylist_expires ON prompt_greylist(expires_at)
+    WHERE expires_at IS NOT NULL;
+
 -- Characters
 CREATE TABLE IF NOT EXISTS characters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

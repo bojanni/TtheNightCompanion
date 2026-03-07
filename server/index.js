@@ -129,6 +129,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/providers', require('./routes/providers'));
 app.use('/api/usage', require('./routes/usage'));
+app.use('/api/greylist', require('./routes/greylist'));
 
 // Server-Sent Events voor realtime extensie-updates
 const sseClients = new Set();

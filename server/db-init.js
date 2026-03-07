@@ -283,6 +283,28 @@ async function initSchema() {
             );
         `);
 
+        // Prompt Greylist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS prompt_greylist (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                prompt_id UUID REFERENCES prompts(id) ON DELETE CASCADE,
+                reason TEXT,
+                greylisted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                expires_at TIMESTAMP WITH TIME ZONE,
+                UNIQUE(prompt_id)
+            );
+        `);
+        await addColumn(pool, 'prompt_greylist', 'reason', 'TEXT');
+        await addColumn(pool, 'prompt_greylist', 'greylisted_at', 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()');
+        await addColumn(pool, 'prompt_greylist', 'expires_at', 'TIMESTAMP WITH TIME ZONE');
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_prompt_greylist_prompt_id ON prompt_greylist(prompt_id);
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_prompt_greylist_expires ON prompt_greylist(expires_at)
+            WHERE expires_at IS NOT NULL;
+        `);
+
         // Characters
         await pool.query(`
             CREATE TABLE IF NOT EXISTS characters (

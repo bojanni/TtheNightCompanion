@@ -5,7 +5,7 @@ import { db } from '../lib/api';
 import { handleError, showSuccess } from '../lib/error-handler';
 import { API_BASE_URL } from '../lib/constants';
 import {
-  exportDatabaseBackupJson,
+  createDatabaseBackupPayload,
   exportDatabaseAndImagesBackupZip,
 } from '../lib/backup-utils';
 
@@ -14,6 +14,11 @@ const TableRowSchema = z.record(z.string(), z.unknown());
 const BackupSchema = z.object({
   version: z.string(),
   exported_at: z.string(),
+  greylist: z.array(z.object({
+    prompt_id: z.string(),
+    reason: z.string().optional().nullable(),
+    expires_at: z.string().optional().nullable(),
+  })).optional().default([]),
   data: z.object({
     prompts: z.array(TableRowSchema),
     characters: z.array(TableRowSchema),
@@ -45,7 +50,41 @@ export function DataManagement() {
   const exportAllData = async () => {
     setExportingDatabase(true);
     try {
-      await exportDatabaseBackupJson();
+      const backup = await createDatabaseBackupPayload();
+      let greylist: Array<{ prompt_id: string; reason: string | null; expires_at: string | null }> = [];
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/greylist`);
+        if (response.ok) {
+          const payload = await response.json();
+          greylist = Array.isArray(payload?.result)
+            ? payload.result.map((row: Record<string, unknown>) => ({
+              prompt_id: String(row.prompt_id || ''),
+              reason: row.reason == null ? null : String(row.reason),
+              expires_at: row.expires_at == null ? null : String(row.expires_at),
+            })).filter((row) => row.prompt_id)
+            : [];
+        }
+      } catch (error) {
+        console.error('Failed to include greylist in export:', error);
+      }
+
+      const payload = {
+        ...backup,
+        greylist,
+      };
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nightcafe-companion-backup-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
       showSuccess('Data exported successfully!');
     } catch (err) {
       handleError(err as Error, 'DataExport');
@@ -95,6 +134,34 @@ export function DataManagement() {
         }
 
         stats[table] = records.length;
+      }
+
+      // Restore greylist after prompts import so FK constraints are satisfied.
+      if (Array.isArray(backup.greylist) && backup.greylist.length > 0) {
+        let greylistImported = 0;
+        for (const entry of backup.greylist) {
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/greylist`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt_id: entry.prompt_id,
+                reason: entry.reason || 'manual',
+                expires_at: entry.expires_at ?? null,
+              }),
+            });
+
+            if (response.ok) {
+              greylistImported += 1;
+            }
+          } catch (error) {
+            console.warn('Greylist import item failed:', entry.prompt_id, error);
+          }
+        }
+
+        if (greylistImported > 0) {
+          stats.greylist = greylistImported;
+        }
       }
 
       setImportStats(stats);
