@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { SkipAIError, AbortAIError } from './ai-service';
+import { AbortAIError } from './ai-service';
 
 /**
  * Error mapping for common error patterns to user-friendly messages
@@ -147,15 +147,6 @@ export function dismissToast(toastId: string | number) {
  * Handle AI-specific errors with richer feedback
  */
 export function handleAIError(error: unknown) {
-    // Handle timeout-related errors silently or with appropriate message
-    if (error instanceof SkipAIError) {
-        toast.info('Generation Skipped', {
-            description: 'AI generation was skipped. You can continue without AI assistance.',
-            duration: 3000,
-        });
-        return;
-    }
-
     if (error instanceof AbortAIError) {
         toast.info('Generation Cancelled', {
             description: 'AI generation was cancelled.',

@@ -3,14 +3,6 @@ import { db } from './api';
 
 const API_URL = `${API_BASE_URL}/api/ai`;
 
-// Custom error for when user chooses to skip AI
-export class SkipAIError extends Error {
-  constructor() {
-    super('User chose to generate without AI');
-    this.name = 'SkipAIError';
-  }
-}
-
 // Custom error for user abort
 export class AbortAIError extends Error {
   constructor() {
@@ -85,6 +77,25 @@ async function callAI(action: string, payload: Record<string, unknown>, token: s
   return data.result;
 }
 
+function getFallbackResult(action: string, payload: Record<string, unknown>): unknown {
+  const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
+  const negativePrompt = typeof payload.negativePrompt === 'string' ? payload.negativePrompt : '';
+  const description = typeof payload.description === 'string' ? payload.description : '';
+
+  switch (action) {
+    case 'improve':
+      return prompt;
+    case 'improve-with-negative':
+      return { improved: prompt, negativePrompt };
+    case 'optimize-for-model':
+      return { optimizedPrompt: prompt, negativePrompt };
+    case 'generate':
+      return { prompt: description || prompt, negativePrompt: '' };
+    default:
+      return null;
+  }
+}
+
 // Timeout wrapper for AI calls
 async function callAIWithTimeout(action: string, payload: Record<string, unknown>, token: string): Promise<any> {
   const TIMEOUT_MS = 30000; // 30 seconds
@@ -92,13 +103,11 @@ async function callAIWithTimeout(action: string, payload: Record<string, unknown
   const performCall = async (): Promise<any> => {
     while (true) {
       let timeoutId: number | null = null;
-      let timeoutOccurred = false;
 
       try {
         // Create timeout promise
         const timeoutPromise = new Promise<void>((resolve) => {
           timeoutId = window.setTimeout(() => {
-            timeoutOccurred = true;
             resolve();
           }, TIMEOUT_MS);
         });
@@ -139,7 +148,7 @@ async function callAIWithTimeout(action: string, payload: Record<string, unknown
             // Continue the loop to wait another 30 seconds
             continue;
           } else if (choice === 'skip-ai') {
-            throw new SkipAIError();
+            return getFallbackResult(action, payload);
           } else {
             // abort
             throw new AbortAIError();

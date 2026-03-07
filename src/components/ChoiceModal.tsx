@@ -47,9 +47,9 @@ export default function ChoiceModal({ isOpen, onClose, title, message, choices }
                 </div>
 
                 <div className="p-6">
-                    <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                    <div className="text-slate-300 text-sm leading-relaxed mb-6">
                         {message}
-                    </p>
+                    </div>
 
                     <div className="space-y-3">
                         {choices.map((choice, index) => (
