@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:diversity": "node --test --experimental-strip-types src/lib/diversity-context.test.ts",
+    "test:ai-connection": "node --test server/tests/ai-connection.test.js",
+    "test": "npm run test:diversity && npm run test:ai-connection",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "schema:drift-check": "node scripts/schema-drift-check.js",
     "db:migrate": "node server/scripts/run-migrations.js",
