@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useProviderHealth } from '../../lib/provider-health';
 import ModelSelector from '../../components/ModelSelector';
 import { getRateLimitInfo, formatRetryWindow } from '../../lib/rate-limit';
+import { syncTaskModel } from '../../hooks/useTaskModels';
 
 interface DashboardProps {
     activeGen: ApiKeyInfo | LocalEndpoint | undefined;
@@ -193,6 +194,8 @@ function ProviderStatusCard({
             // Map 'research' to 'generation' role for backend (uses same mechanism)
             const backendRole = role === 'research' ? 'generation' : role;
             await setActiveProvider(newProvider.provider, modelToUse, true, backendRole);
+            // Keep localStorage in sync so the Generator page picks up the new model
+            if (modelToUse) syncTaskModel(backendRole, newProvider.provider, modelToUse);
             await onRefreshData();
             checkHealth(getProviderId(newProvider), newProvider);
             toast.success(`${label} provider changed to ${newProvider.provider}`);
@@ -210,6 +213,8 @@ function ProviderStatusCard({
         try {
             const backendRole = role === 'research' ? 'generation' : role;
             await setActiveProvider(activeProvider.provider, newModel, true, backendRole);
+            // Keep localStorage in sync so the Generator page picks up the new model
+            syncTaskModel(backendRole, activeProvider.provider, newModel);
             await onRefreshData();
             toast.success(`${label} model updated`);
         } catch (err) {

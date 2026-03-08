@@ -12,6 +12,7 @@ import ModelSelector from '../../components/ModelSelector';
 import { toast } from 'sonner';
 import { useProviderHealth } from '../../lib/provider-health';
 import { getRateLimitInfo, formatRetryWindow } from '../../lib/rate-limit';
+import { syncTaskModel } from '../../hooks/useTaskModels';
 
 export interface ProviderConfigFormProps {
     provider: {
@@ -170,6 +171,10 @@ export function ProviderConfigForm({
             }
 
             await setActiveProvider(provider.id, currentModel, !isActuallyActive, role);
+            // Keep localStorage in sync so the Generator page picks up the new model
+            if (!isActuallyActive && currentModel) {
+                syncTaskModel(role, provider.id, currentModel);
+            }
             toast.success(`${provider.name} ${role} ${isActuallyActive ? 'deactivated' : 'activated'}`);
             await loadKeys();
             await loadLocalEndpoints();
@@ -211,6 +216,10 @@ export function ProviderConfigForm({
         if (!isEditing && keyInfo) {
             try {
                 await updateModels(provider.id, genId, improveId, visionId);
+                // Sync localStorage for roles where this provider is currently active
+                if (keyInfo.is_active_gen) syncTaskModel('generation', provider.id, genId);
+                if (keyInfo.is_active_improve) syncTaskModel('improvement', provider.id, improveId);
+                if (keyInfo.is_active_vision) syncTaskModel('vision', provider.id, visionId);
                 toast.success('Model preferences updated');
                 await loadKeys();
             } catch (e) {
