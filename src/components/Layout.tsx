@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Wrench, Clock, ChevronLeft, ChevronRight,
   LayoutDashboard, Wand2, Sparkles, Users, Image as ImageIcon,
-  Compass, FlaskConical, Fingerprint, Settings,
+  Compass, FlaskConical, Fingerprint, Settings, Shuffle,
   Moon, Sun, BarChart2, Loader2, Info, Download, Wifi, WifiOff,
   AlertTriangle, Database, Images
 } from 'lucide-react';
@@ -32,6 +32,7 @@ import {
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
   { to: '/generator', icon: Wand2, labelKey: 'nav.generator' },
+  { to: '/ai-random', icon: Shuffle, labelKey: 'nav.aiRandomGenerator' },
   { to: '/prompts', icon: Sparkles, labelKey: 'nav.prompts' },
   { to: '/characters', icon: Users, labelKey: 'nav.characters' },
   { to: '/gallery', icon: ImageIcon, labelKey: 'nav.gallery' },

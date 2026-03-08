@@ -367,7 +367,7 @@ async function callGemini(apiKey, system, user, maxTokens = 1500, temperature = 
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ parts: [{ text: textUser }] }],
-            generationConfig: { temperature: temperature }
+            generationConfig: { temperature: temperature, maxOutputTokens: maxTokens }
         })
     });
     const data = await res.json();
@@ -669,7 +669,7 @@ async function listModels(providerConfig) {
         return asArray(data?.data).filter(m => m.id.includes('gpt')).map(m => ({ id: m.id, name: m.id }));
     }
 
-    if (provider === 'gemini') {
+    if (provider === 'gemini' || provider === 'google') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         const data = await readJsonSafe(res);
         if (!res.ok) {
@@ -745,7 +745,8 @@ async function callAI(providerConfig, system, user, maxTokens = 1500, temperatur
     switch (provider) {
         case 'openai': return callOpenAI(apiKey, system, user, maxTokens, temperature, model);
         case 'anthropic': return callAnthropic(apiKey, system, user, maxTokens, temperature, model);
-        case 'gemini': return callGemini(apiKey, system, user, maxTokens, temperature, model);
+        case 'gemini':
+        case 'google': return callGemini(apiKey, system, user, maxTokens, temperature, model);
         case 'openrouter': return callOpenRouter(apiKey, system, user, model, maxTokens, temperature, options);
         case 'together': return callTogether(apiKey, system, user, model, maxTokens, temperature);
         case 'deepinfra': return callDeepInfra(apiKey, system, user, model, maxTokens, temperature);
@@ -952,10 +953,12 @@ router.post('/', async (req, res) => {
         }
 
         async function getProviderCredentials(providerId) {
-            if (['ollama', 'lmstudio'].includes(providerId)) {
+            // Normalise provider aliases (e.g. frontend uses 'google', DB stores 'gemini')
+            const normalizedId = providerId === 'google' ? 'gemini' : providerId;
+            if (['ollama', 'lmstudio'].includes(normalizedId)) {
                 const local = await pool.query(
                     'SELECT provider, endpoint_url, model_name FROM user_local_endpoints WHERE provider = $1',
-                    [providerId]
+                    [normalizedId]
                 );
                 if (local.rows.length > 0) {
                     return { type: 'local', ...local.rows[0] };
@@ -963,7 +966,7 @@ router.post('/', async (req, res) => {
             } else {
                 const cloud = await pool.query(
                     'SELECT provider, encrypted_key, model_name FROM user_api_keys WHERE provider = $1',
-                    [providerId]
+                    [normalizedId]
                 );
                 if (cloud.rows.length > 0) {
                     return {
