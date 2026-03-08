@@ -107,6 +107,20 @@ const JSON_ACTIONS = new Set([
     'optimize-for-model'
 ]);
 
+// Actions that require deterministic (low-temperature) JSON output.
+// Creative generation actions ('random', 'generate') are intentionally excluded
+// so their creativity-based temperature settings are not overridden.
+const LOW_TEMP_JSON_ACTIONS = new Set([
+    'analyze-style',
+    'diagnose',
+    'recommend-models',
+    'improve-detailed',
+    'improve-with-negative',
+    'generate-variations',
+    'describe-character',
+    'optimize-for-model'
+]);
+
 // ─── LLM pricing (USD per 1M tokens) ────────────────────────────────────────
 const PROVIDER_PRICING = {
     openai: {
@@ -246,6 +260,42 @@ function parseJsonStringSafe(raw) {
     } catch {
         return null;
     }
+}
+
+// ─── JSON response parsing helpers ──────────────────────────────────────────
+
+function normalizeJsonish(value) {
+    if (!value || typeof value !== 'string') return value;
+    let text = value.trim();
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch) text = codeBlockMatch[1].trim();
+    text = text.replace(/^json\s*[:\-]?\s*/i, '');
+    if (text.startsWith('[') && text.endsWith(']') && text.includes('"improved"')) {
+        text = text.slice(1, -1).trim();
+    }
+    if (!text.startsWith('{') && /"[A-Za-z0-9_]+"\s*:/.test(text)) {
+        text = `{${text}}`;
+    }
+    text = text.replace(/,\s*([}\]])/g, '$1');
+    return text;
+}
+
+function extractJsonCandidate(raw) {
+    if (!raw) return null;
+    const codeBlockMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) return codeBlockMatch[1];
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) return raw.substring(firstBrace, lastBrace + 1);
+    return null;
+}
+
+function attemptParseJsonResponse(raw) {
+    const candidate = extractJsonCandidate(raw);
+    if (!candidate) return null;
+    const direct = parseJsonStringSafe(candidate);
+    if (direct !== null) return direct;
+    return parseJsonStringSafe(normalizeJsonish(candidate));
 }
 
 // Minimal implementation of AI calls using fetch
@@ -745,6 +795,9 @@ router.post('/', async (req, res) => {
             if (payload.greylist && payload.greylist.length > 0) {
                 userPrompt += `\nAvoid using the following words or subjects if possible: ${payload.greylist.join(', ')}.`;
             }
+            if (payload.recentPrompts && payload.recentPrompts.length > 0) {
+                userPrompt += `\nAvoid generating themes or content highly similar to these recent prompts: ${payload.recentPrompts.join('; ')}.`;
+            }
         } else if (action === 'diagnose') {
             userPrompt = `Prompt: "${payload.prompt}"\nIssue: ${payload.issue}`;
         } else if (action === 'recommend-models') {
@@ -779,7 +832,7 @@ router.post('/', async (req, res) => {
                 userPrompt += `\nAvoid using the following words or subjects if possible: ${payload.greylist.join(', ')}.`;
             }
             if (payload.recentPrompts && payload.recentPrompts.length > 0) {
-                userPrompt += `\nAve avoiding highly similar themes or direct variations of your previous 3 generations: ${payload.recentPrompts.join("; ")}`;
+                userPrompt += `\nAvoid generating themes or content highly similar to these recent prompts: ${payload.recentPrompts.join('; ')}.`;
             }
         } else if (action === 'generate-variations') {
             const count = payload.count || 5;
@@ -894,7 +947,7 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Invalid action' });
         }
 
-        if (JSON_ACTIONS.has(action)) {
+        if (LOW_TEMP_JSON_ACTIONS.has(action)) {
             temperature = Math.min(temperature, 0.4);
         }
 
@@ -1024,10 +1077,39 @@ router.post('/', async (req, res) => {
             fs.appendFile(path.join(__dirname, '../../logs/api.log'), reqLog, (err) => { if (err) console.error('Error writing to api.log', err); });
         }
 
-        const { content: result, usage } = await callAI(provider, systemPrompt, userPrompt, maxTokens, temperature, {
+        const { content: result_initial, usage: usage_initial } = await callAI(provider, systemPrompt, userPrompt, maxTokens, temperature, {
             forceJson: JSON_ACTIONS.has(action),
             action
         });
+
+        let result = result_initial;
+        let usage = usage_initial;
+
+        // For JSON actions, attempt to parse immediately; retry once on failure
+        if (JSON_ACTIONS.has(action)) {
+            const parsed = attemptParseJsonResponse(result);
+            if (parsed === null) {
+                logger.warn(`[${action}] JSON parse failed on first attempt, retrying with explicit JSON instruction (temp=0.3)`);
+                const retryUserPrompt = `${userPrompt}\n\nCRITICAL REMINDER: Your previous response was not valid JSON. You MUST return ONLY a valid JSON object with no extra text, markdown, or explanation.`;
+                try {
+                    const retryResult = await callAI(provider, systemPrompt, retryUserPrompt, maxTokens, 0.3, {
+                        forceJson: true,
+                        action
+                    });
+                    result = retryResult.content;
+                    usage = {
+                        prompt_tokens: (usage?.prompt_tokens || 0) + (retryResult.usage?.prompt_tokens || 0),
+                        completion_tokens: (usage?.completion_tokens || 0) + (retryResult.usage?.completion_tokens || 0),
+                    };
+                    if (isLoggingEnabled) {
+                        logger.info(`[${action}] Retry succeeded, new content: ${String(result).substring(0, 200)}`);
+                    }
+                } catch (retryError) {
+                    logger.warn(`[${action}] Retry also failed: ${retryError.message}`);
+                    // Keep original result so downstream fallback can attempt raw recovery
+                }
+            }
+        }
 
         const promptTokens = usage?.prompt_tokens || 0;
         const completionTokens = usage?.completion_tokens || 0;
@@ -1066,77 +1148,15 @@ router.post('/', async (req, res) => {
         let parsedResult = result;
         if (JSON_ACTIONS.has(action)) {
             try {
-                const tryParseJson = (value) => {
-                    try {
-                        return JSON.parse(value);
-                    } catch {
-                        return null;
-                    }
-                };
-
-                const normalizeJsonish = (value) => {
-                    if (!value || typeof value !== 'string') return value;
-                    let text = value.trim();
-
-                    // Strip markdown fences
-                    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-                    if (codeBlockMatch) {
-                        text = codeBlockMatch[1].trim();
-                    }
-
-                    // Strip leading json markers like "json", "json:", "JSON\n"
-                    text = text.replace(/^json\s*[:\-]?\s*/i, '');
-
-                    // If wrapped in [] but looks like an object payload, unwrap to object braces
-                    if (text.startsWith('[') && text.endsWith(']') && text.includes('"improved"')) {
-                        text = text.slice(1, -1).trim();
-                    }
-
-                    // If key/value pairs exist but no surrounding braces, add them
-                    if (!text.startsWith('{') && /"[A-Za-z0-9_]+"\s*:/.test(text)) {
-                        text = `{${text}}`;
-                    }
-
-                    // Remove trailing commas before closing braces/brackets
-                    text = text.replace(/,\s*([}\]])/g, '$1');
-                    return text;
-                };
-
-                let jsonStr = result;
-                // Attempt to find JSON within markdown code blocks first
-                const codeBlockMatch = result && result.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                if (codeBlockMatch) {
-                    jsonStr = codeBlockMatch[1];
+                const parsed = attemptParseJsonResponse(result);
+                if (parsed !== null) {
+                    parsedResult = parsed;
                 } else {
-                    // Fallback to finding the first { and last }
-                    const firstBrace = result ? result.indexOf('{') : -1;
-                    const lastBrace = result ? result.lastIndexOf('}') : -1;
-                    if (firstBrace !== -1 && lastBrace !== -1) {
-                        jsonStr = result.substring(firstBrace, lastBrace + 1);
-                    }
-                }
-
-                if (jsonStr) {
-                    const direct = tryParseJson(jsonStr);
-                    if (direct !== null) {
-                        parsedResult = direct;
-                    } else {
-                        const normalized = normalizeJsonish(jsonStr);
-                        const recovered = tryParseJson(normalized);
-                        if (recovered !== null) {
-                            parsedResult = recovered;
-                        } else {
-                            throw new Error('Unrecoverable JSON parse failure');
-                        }
-                    }
-                } else {
-                    logger.warn('No JSON found in response');
-                    // Return a safe fallback structure if possible, or just the raw text
+                    logger.warn(`[${action}] No JSON found in response after retry`);
                     parsedResult = { error: "Failed to parse AI response", raw: result };
                 }
             } catch (e) {
                 logger.warn('Failed to parse JSON response:', e);
-                // Return raw text if parsing fails, but helpful to log what it was
                 logger.debug('Raw output was: ' + result);
                 parsedResult = { error: "Invalid JSON from AI", raw: result };
             }
