@@ -8,6 +8,7 @@ import { setActiveProvider } from '../../lib/api-keys-service';
 import type { ModelOption } from '../../lib/provider-models';
 import { toast } from 'sonner';
 import { LOCAL_PROVIDERS, AIRole } from '../../lib/constants';
+import { syncTaskModel } from '../../hooks/useTaskModels';
 
 interface ConfigurationWizardProps {
     keys: ApiKeyInfo[];
@@ -125,6 +126,8 @@ export function ConfigurationWizard({
                                         : role === 'improvement' ? endpoint?.is_active_improve
                                             : endpoint?.is_active_vision;
                                     await setActiveProvider(LOCAL_PROVIDERS.OLLAMA, model || '', !isRoleActive, role as AIRole);
+                                    // Keep localStorage in sync so the Generator page picks up the new model
+                                    if (!isRoleActive && model) syncTaskModel(role, LOCAL_PROVIDERS.OLLAMA, model);
                                     await loadKeys(); await loadLocalEndpoints();
                                 } catch { toast.error('Failed to toggle'); }
                                 finally { setActionLoading(null); }
@@ -172,6 +175,8 @@ export function ConfigurationWizard({
                                         : role === 'improvement' ? endpoint?.is_active_improve
                                             : endpoint?.is_active_vision;
                                     await setActiveProvider(LOCAL_PROVIDERS.LMSTUDIO, model || '', !isRoleActive, role as AIRole);
+                                    // Keep localStorage in sync so the Generator page picks up the new model
+                                    if (!isRoleActive && model) syncTaskModel(role, LOCAL_PROVIDERS.LMSTUDIO, model);
                                     await loadKeys(); await loadLocalEndpoints();
                                 } catch { toast.error('Failed to toggle'); }
                                 finally { setActionLoading(null); }
