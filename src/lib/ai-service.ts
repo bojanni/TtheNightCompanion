@@ -351,6 +351,7 @@ export async function generateFromDescription(
     preferences?: GeneratePreferences | undefined;
     successfulPrompts?: string[] | undefined;
     greylist?: string[] | undefined;
+    recentPrompts?: string[] | undefined;
     taskModel?: string | undefined;
   },
   token: string
@@ -361,10 +362,62 @@ export async function generateFromDescription(
     preferences: options.preferences,
     successfulPrompts: options.successfulPrompts,
     greylist: options.greylist,
+    recentPrompts: options.recentPrompts,
   };
   const prefs = taskModelToPreferences(options.taskModel);
   if (prefs) payload.apiPreferences = prefs;
-  return callAIWithTimeout('generate', payload, token);
+  const result = await callAIWithTimeout('generate', payload, token) as unknown;
+
+  if (result && typeof result === 'object') {
+    const obj = result as Record<string, unknown>;
+
+    // Happy path: well-formed response
+    const promptText = String(obj.prompt ?? obj.improved ?? obj.optimizedPrompt ?? obj.content ?? obj.text ?? '').trim();
+    if (promptText) {
+      const negText = String(obj.negativePrompt ?? obj.negative_prompt ?? '').trim();
+      const out: { prompt: string; negativePrompt?: string } = { prompt: promptText };
+      if (negText) out.negativePrompt = negText;
+      return out;
+    }
+
+    // Server returned a fallback error envelope { error, raw } — try to recover from the raw field
+    if ('raw' in obj) {
+      const raw = String(obj.raw || '').trim();
+      if (raw) {
+        const tryParseJson = (s: string): Record<string, unknown> | null => {
+          try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
+        };
+        const codeMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        let candidate = codeMatch?.[1]?.trim() ?? raw;
+        candidate = candidate.replace(/^json\s*[:\-]?\s*/i, '').trim();
+        const firstBrace = candidate.indexOf('{');
+        const lastBrace = candidate.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          candidate = candidate.slice(firstBrace, lastBrace + 1);
+        }
+        const parsed = tryParseJson(candidate.replace(/,\s*([}\]])/g, '$1'));
+        if (parsed) {
+          const recoveredPrompt = String(parsed.prompt ?? parsed.improved ?? parsed.optimizedPrompt ?? '').trim();
+          if (recoveredPrompt) {
+            const negText = String(parsed.negativePrompt ?? parsed.negative_prompt ?? '').trim();
+            const out: { prompt: string; negativePrompt?: string } = { prompt: recoveredPrompt };
+            if (negText) out.negativePrompt = negText;
+            return out;
+          }
+        }
+        // Last resort: treat the raw string as the prompt
+        if (raw.length > 10 && !raw.startsWith('{')) {
+          return { prompt: raw };
+        }
+      }
+    }
+  }
+
+  if (typeof result === 'string' && result.trim()) {
+    return { prompt: result.trim() };
+  }
+
+  throw new Error('Generate AI response did not include a valid prompt.');
 }
 
 export async function generateRandomPromptAI(token: string, theme?: string, maxWords?: number, greylist?: string[], creativity?: 'focused' | 'balanced' | 'wild', recentPrompts?: string[], taskModel?: string): Promise<{ prompt: string; negativePrompt?: string; style?: string }> {
@@ -386,11 +439,10 @@ export async function generateRandomPromptAI(token: string, theme?: string, maxW
     const negativePrompt = String(obj.negativePrompt ?? obj.negative_prompt ?? '').trim();
     const style = String(obj.style ?? '').trim();
 
-    return {
-      prompt,
-      negativePrompt: negativePrompt || undefined,
-      style: style || undefined,
-    };
+    const out: { prompt: string; negativePrompt?: string; style?: string } = { prompt };
+    if (negativePrompt) out.negativePrompt = negativePrompt;
+    if (style) out.style = style;
+    return out;
   };
 
   const parseJsonish = (rawInput: string): Record<string, unknown> | null => {
@@ -398,7 +450,7 @@ export async function generateRandomPromptAI(token: string, theme?: string, maxW
     if (!raw) return null;
 
     const codeMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    let candidate = codeMatch ? codeMatch[1].trim() : raw;
+    let candidate = codeMatch?.[1]?.trim() ?? raw;
     candidate = candidate.replace(/^json\s*[:\-]?\s*/i, '').trim();
 
     const tryParse = (text: string): Record<string, unknown> | null => {
