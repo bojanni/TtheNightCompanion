@@ -29,6 +29,7 @@
         "settings": "AI Configuratie",
         "generalSettings": "Instellingen",
         "generator": "Generator",
+        "aiRandomGenerator": "AI Random",
         "models": "Modellen",
         "batchTesting": "Batch Testen",
         "styleProfile": "Stijlprofiel",

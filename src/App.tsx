@@ -20,6 +20,7 @@ import Statistics from './pages/Statistics';
 import ImportHub from './pages/ImportHub';
 import UsageDashboard from './pages/UsageDashboard';
 import ModelEnrichmentManager from './pages/ModelEnrichmentManager';
+import AIRandomGenerator from './pages/AIRandomGenerator';
 
 import { ExtensionProvider } from './context/ExtensionContext';
 import { AITimeoutProvider } from './context/AITimeoutContext';
@@ -39,6 +40,7 @@ export default function App() {
         }>
           <Route path="/" element={<Dashboard />} />
           <Route path="/generator" element={<Generator />} />
+          <Route path="/ai-random" element={<AIRandomGenerator />} />
           <Route path="/prompts" element={<Prompts />} />
           <Route path="/characters" element={<Characters />} />
           <Route path="/gallery" element={<Gallery />} />
