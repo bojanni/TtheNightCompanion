@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Sparkles, Brain, MessageSquare, AlertTriangle,
@@ -117,7 +117,21 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
   const [modelTips, setModelTips] = useState<string[]>([]);
   const [useModelTips, setUseModelTips] = useState(false);
 
+  // Performance fix: Cache context data for generate function
+  const [generateContext, setGenerateContext] = useState<{ chars: string[], prompts: string[] }>({ chars: [], prompts: [] });
+  
+  // Performance fix: Cooldown for fetchActiveModel on window focus
+  const lastFetchTimeRef = useRef<number>(0);
+  const FETCH_COOLDOWN_MS = 60000; // 60 seconds
+
+  // Performance fix: Add cooldown to fetchActiveModel
   async function fetchActiveModel() {
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < FETCH_COOLDOWN_MS) {
+      return; // Skip fetch if within cooldown period
+    }
+    lastFetchTimeRef.current = now;
+    
     try {
       const { data: localData } = await db
         .from('user_local_endpoints')
@@ -190,6 +204,25 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
     };
     localStorage.setItem(AITOOLS_STORAGE_KEY, JSON.stringify(state));
   }, [tab, expanded, improveInput, improveResult, negativeInput, negativeResult, generateInput, generateResult, generateNegativeResult, generatePrefs, styleResult, diagnosePromptInput, diagnoseIssue, diagnoseResult]);
+
+  // Performance fix: Fetch context data once on component mount
+  useEffect(() => {
+    async function fetchGenerateContext() {
+      try {
+        const [charsRes, topPromptsRes] = await Promise.all([
+          db.from('characters').select('name, description').limit(5),
+          db.from('prompts').select('content').gte('rating', 4).order('rating', { ascending: false }).limit(5),
+        ]);
+        const chars = charsRes.data?.map((c: any) => `${c.name}: ${c.description}`) || [];
+        const prompts = topPromptsRes.data?.map((p: any) => p.content) || [];
+        setGenerateContext({ chars, prompts });
+      } catch (e) {
+        console.error('Failed to fetch generate context:', e);
+      }
+    }
+    
+    fetchGenerateContext();
+  }, []);
 
   useEffect(() => {
     fetchActiveModel();
@@ -266,21 +299,19 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
     } catch (e) { handleAIError(e); } finally { setLoading(false); }
   }
 
+  // Performance fix: Use cached context data instead of fetching on every generation
   async function handleGenerate() {
     if (!generateInput.trim()) return;
     setLoading(true); setGenerateResult(''); setGenerateNegativeResult('');
     try {
       const token = '';
-      const [charsRes, topPromptsRes] = await Promise.all([
-        db.from('characters').select('name, description').limit(5),
-        db.from('prompts').select('content').gte('rating', 4).order('rating', { ascending: false }).limit(5),
-      ]);
-      const context = charsRes.data?.map((c: any) => `${c.name}: ${c.description}`).join('; ');
-      const successfulPrompts = topPromptsRes.data?.map((p: any) => p.content) ?? [];
+      const context = generateContext.chars.length > 0 ? generateContext.chars.join('; ') : undefined;
+      const successfulPrompts = generateContext.prompts.length > 0 ? generateContext.prompts : undefined;
+      
       const result = await generateFromDescription(generateInput, {
-        context: context || undefined,
+        context,
         preferences: { ...generatePrefs, maxWords },
-        successfulPrompts: successfulPrompts.length > 0 ? successfulPrompts : undefined,
+        successfulPrompts,
         taskModel: taskGenerateModel,
       }, token);
       if (result) {
@@ -315,6 +346,7 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
     } catch (e) { handleAIError(e); } finally { setLoading(false); }
   }
 
+  // Performance fix: Remove blocking recommendNCModel call and make keyword extraction non-blocking
   async function handleSavePrompt(text: string, title: string, options?: { originalPrompt?: string, suggestedModelId?: string, negativePrompt?: string }) {
     setSaving(title);
     try {
@@ -329,23 +361,15 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
         onRequestSavePrompt(data); setSaving(''); return;
       }
 
+      // Performance fix: Only check duplicates when onRequestSavePrompt is not provided (already correct)
       const { data: existingPrompts } = await db.from('prompts').select('id').eq('content', text).limit(1);
       if (existingPrompts && existingPrompts.length > 0) { toast.error('Already in library'); setSaving(''); return; }
 
       const suggestion = analyzePrompt(text)[0];
       const suggestedModelIdToSave = suggestion ? suggestion.model.id : undefined;
 
-      let ncModelNote = '';
-      try {
-        const ncRecommendation = await recommendNCModel(text);
-        if (ncRecommendation) {
-          ncModelNote = ` | Best NC Model: ${ncRecommendation.model.name}`;
-          toast.success(`Recommended: ${ncRecommendation.model.name}`);
-        }
-      } catch (e) { }
-
       const { data: newPrompt, error } = await db.from('prompts').insert({
-        title, content: text, notes: 'Generated with AI Tools' + ncModelNote, generation_journey: journeySteps,
+        title, content: text, notes: 'Generated with AI Tools', generation_journey: journeySteps,
         rating: 0, is_template: false, is_favorite: false, suggested_model: suggestedModelIdToSave,
         negative_prompt: options?.negativePrompt || null
       }).select().single();
@@ -353,7 +377,25 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
       if (error) throw error;
       
       if (newPrompt) {
-        triggerKeywordExtraction(newPrompt.id, newPrompt.content);
+        // Performance fix: Make keyword extraction completely non-blocking
+        setTimeout(() => {
+          triggerKeywordExtraction(newPrompt.id, newPrompt.content);
+        }, 0);
+        
+        // Performance fix: Move NC model recommendation to background after save
+        setTimeout(async () => {
+          try {
+            const ncRecommendation = await recommendNCModel(text);
+            if (ncRecommendation) {
+              // Update the saved prompt with NC model recommendation silently
+              await db.from('prompts').update({ 
+                notes: `Generated with AI Tools | Best NC Model: ${ncRecommendation.model.name}` 
+              }).eq('id', newPrompt.id);
+            }
+          } catch (e) {
+            // Silently fail - don't block UI
+          }
+        }, 100);
       }
       
       toast.success('Prompt saved'); if (onSaved) onSaved();
