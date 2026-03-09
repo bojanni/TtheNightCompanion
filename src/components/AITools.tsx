@@ -120,9 +120,32 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
   // Performance fix: Cache context data for generate function
   const [generateContext, setGenerateContext] = useState<{ chars: string[], prompts: string[] }>({ chars: [], prompts: [] });
   
+  // Performance fix: Cache recent prompts for analyze function
+  const [recentPrompts, setRecentPrompts] = useState<string[]>([]);
+  
   // Performance fix: Cooldown for fetchActiveModel on window focus
   const lastFetchTimeRef = useRef<number>(0);
   const FETCH_COOLDOWN_MS = 60000; // 60 seconds
+  
+  // Performance fix: Add refresh mechanism for cached data
+  const refreshContextData = async () => {
+    try {
+      const [charsRes, topPromptsRes] = await Promise.all([
+        db.from('characters').select('name, description').limit(5),
+        db.from('prompts').select('content').gte('rating', 4).order('rating', { ascending: false }).limit(5),
+      ]);
+      const chars = charsRes.data?.map((c: any) => `${c.name}: ${c.description}`) || [];
+      const prompts = topPromptsRes.data?.map((p: any) => p.content) || [];
+      setGenerateContext({ chars, prompts });
+      
+      const { data } = await db.from('prompts').select('content').order('created_at', { ascending: false }).limit(20);
+      if (data) {
+        setRecentPrompts(data.map((p: any) => p.content));
+      }
+    } catch (e) {
+      console.error('Failed to refresh context data:', e);
+    }
+  };
 
   // Performance fix: Add cooldown to fetchActiveModel
   async function fetchActiveModel() {
@@ -221,7 +244,19 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
       }
     }
     
+    async function fetchRecentPrompts() {
+      try {
+        const { data } = await db.from('prompts').select('content').order('created_at', { ascending: false }).limit(20);
+        if (data) {
+          setRecentPrompts(data.map((p: any) => p.content));
+        }
+      } catch (e) {
+        console.error('Failed to fetch recent prompts:', e);
+      }
+    }
+    
     fetchGenerateContext();
+    fetchRecentPrompts();
   }, []);
 
   useEffect(() => {
@@ -321,18 +356,21 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
     } catch (e) { handleAIError(e); } finally { setLoading(false); }
   }
 
+  // Performance fix: Use cached recent prompts for analyze function
   async function handleAnalyze() {
     setLoading(true); setStyleResult(null);
     try {
       const token = '';
-      const { data } = await db.from('prompts').select('content').order('created_at', { ascending: false }).limit(20);
-      if (!data || data.length < 3) {
+      
+      // Use cached recent prompts instead of fetching from DB every time
+      if (recentPrompts.length < 3) {
         toast.error('Need at least 3 saved prompts to analyze your style');
         setLoading(false); return;
       }
-      const result = await analyzeStyle(data.map((p: any) => p.content), token);
+      
+      const result = await analyzeStyle(recentPrompts, token);
       setStyleResult(result);
-      saveStyleProfile(result, data.length).catch(() => { });
+      saveStyleProfile(result, recentPrompts.length).catch(() => { });
     } catch (e) { handleAIError(e); } finally { setLoading(false); }
   }
 
@@ -396,6 +434,11 @@ const AITools = forwardRef<AIToolsRef, AIToolsProps>(({ onRequestSavePrompt, onP
             // Silently fail - don't block UI
           }
         }, 100);
+        
+        // Performance fix: Refresh cached data after successful save
+        setTimeout(() => {
+          refreshContextData();
+        }, 200);
       }
       
       toast.success('Prompt saved'); if (onSaved) onSaved();
